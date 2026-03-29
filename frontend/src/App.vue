@@ -1,19 +1,19 @@
 <script setup>
-import Settings from './components/Settings.vue'
-import { reactive, onMounted, ref } from 'vue'
-import { EventsOn } from '../wailsjs/runtime'
+import { onMounted, reactive, ref } from 'vue'
 import { CheckConnection } from '../wailsjs/go/main/App'
-import GraphVisualizer from './components/GraphVisualizer.vue'
+import { EventsOn } from '../wailsjs/runtime'
 import ChatPanel from './components/ChatPanel.vue'
+import GraphVisualizer from './components/GraphVisualizer.vue'
+import Settings from './components/Settings.vue'
 
 const currentView = ref('orchestrator') // views: orchestrator, settings
 const isOnline = ref(false)
 
 // Painel redimensionável
-const chatWidth = ref(420)
+const chatWidth = ref(500)
 const isResizing = ref(false)
-const minChatWidth = 300
-const maxChatWidth = 900
+const minChatWidth = 500
+const maxChatWidth = 1400
 
 const state = reactive({
   logs: [],

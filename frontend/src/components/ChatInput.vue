@@ -105,14 +105,14 @@ const sendMessage = () => {
 
 <style scoped>
 .chat-input-container {
-  padding: 0 24px 32px 24px;
+  padding: 0 0 32px 0;
   background: transparent;
   width: 100%;
 }
 
 .chat-input-wrapper {
-  max-width: 860px;
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   background: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -132,10 +132,13 @@ const sendMessage = () => {
 .input-toolbar {
   display: flex;
   align-items: center;
-  gap: 24px;
+  justify-content: space-between;
+  gap: 12px; /* Reduzindo um pouco o gap para dar mais espaço */
   margin-bottom: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: nowrap;
+  min-width: 0; /* Permite que o container encolha se necessário */
 }
 
 .selector-group {
@@ -145,11 +148,12 @@ const sendMessage = () => {
 }
 
 .selector-group label {
-  font-size: 11px;
-  color: #94a3b8;
-  font-weight: 700;
+  font-size: 10px; /* Reduzi 1px */
+  color: #c0c0c0; /* Mais brilhante para contraste */
+  font-weight: 800; /* Mais negrito */
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.2px;
+  white-space: nowrap; /* Impede que quebre linha */
 }
 
 .premium-select {

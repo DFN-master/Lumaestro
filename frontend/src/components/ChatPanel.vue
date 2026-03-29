@@ -1,10 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { onMounted, ref } from 'vue'
 import { useOrchestratorStore } from '../stores/orchestrator'
-import TerminalView from './TerminalView.vue'
-import ChatLog from './ChatLog.vue'
 import ChatInput from './ChatInput.vue'
+import ChatLog from './ChatLog.vue'
+import TerminalView from './TerminalView.vue'
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
@@ -132,7 +132,7 @@ const handleSessionEnded = () => {
 <style scoped>
 .chat-panel-parent {
   height: 100vh;
-  min-width: 450px; /* Impede que os componentes se esmaguem em janelas pequenas */
+  min-width: 500px; /* Alinhado com minChatWidth do App.vue */
   display: flex;
   flex-direction: column;
   background: #09090b; /* Darker near black */
