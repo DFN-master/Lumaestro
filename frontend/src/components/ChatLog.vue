@@ -1,49 +1,66 @@
 <template>
-  <div class="chat-log-container" ref="logContainer">
-    <div v-for="(msg, index) in messages" :key="index" :class="['message-row', msg.role]">
-      <div class="message-bubble">
-        <!-- Ícone do Remetente -->
-        <div class="sender-icon" :class="{ 'glass-icon': msg.role === 'assistant', 'user-icon': msg.role === 'user' }">
-          <svg v-if="msg.role === 'assistant'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 12 20 22 4 22 4 12"></polyline>
-            <rect x="2" y="7" width="20" height="5" rx="2" ry="2"></rect>
-            <line x1="12" y1="22" x2="12" y2="7"></line>
-            <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path>
-            <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>
-          </svg>
-          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-             <circle cx="12" cy="7" r="4"></circle>
-          </svg>
+  <div class="chat-log-container" ref="logContainer" @click="handleLogClick">
+    <div v-for="(msg, index) in messages" :key="index" :class="['message-row', msg.role, msg.mode]">
+      <div class="message-bubble" :class="{ 'system-message': msg.mode === 'system' }">
+        
+        <!-- Ícone Dinâmico por Agente -->
+        <div 
+          v-if="msg.mode !== 'system'"
+          class="sender-icon" 
+          :class="getIconClass(msg)"
+        >
+          <template v-if="msg.role === 'user'">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+               <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </template>
+          
+          <template v-else-if="msg.agent === 'Terminal'">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+          </template>
+          
+          <template v-else-if="msg.agent === 'Claude'">
+             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+            </svg>
+          </template>
+
+          <template v-else>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+          </template>
         </div>
         
         <div class="message-content">
           <div class="message-text" v-html="formatMessage(msg.text)"></div>
           
-          <!-- Metadados (Agente/Modo se for assistente) -->
-          <div v-if="msg.role === 'assistant' && msg.agent" class="message-meta">
+          <!-- Metadados (Apenas se não for sistema) -->
+          <div v-if="msg.role === 'assistant' && msg.agent && msg.mode !== 'system'" class="message-meta">
             <span class="agent-badge">{{ msg.agent }}</span>
-            <span class="mode-badge">{{ msg.mode }}</span>
+            <span class="mode-badge">Resumo</span>
           </div>
         </div>
       </div>
     </div>
     
-    <!-- Indicador de Digitação / Thinking -->
+    <!-- Indicador de Digitação (Thinking) Premium -->
     <div v-if="isThinking" class="message-row assistant thinking">
       <div class="message-bubble">
-        <div class="sender-icon glass-icon">
+        <div class="sender-icon assistant-icon pulsing">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M12 16v-4"></path>
-            <path d="M12 8h.01"></path>
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
           </svg>
         </div>
         <div class="thinking-wrapper">
-           <div class="thinking-text">Processando</div>
-           <div class="thinking-dots">
-             <span></span><span></span><span></span>
+           <div class="thinking-waves">
+             <span></span><span></span><span></span><span></span>
            </div>
+           <div class="thinking-text">Orquestrando...</div>
         </div>
       </div>
     </div>
@@ -52,19 +69,42 @@
 
 <script setup>
 import { ref, watch, onMounted, nextTick } from 'vue';
+import { useClipboard } from '@vueuse/core';
 
 const props = defineProps({
-  messages: {
-    type: Array,
-    required: true
-  },
-  isThinking: {
-    type: Boolean,
-    default: false
-  }
+  messages: { type: Array, required: true },
+  isThinking: { type: Boolean, default: false }
 });
 
+const { copy } = useClipboard();
 const logContainer = ref(null);
+
+// Delegação de evento para o botão de COPY
+const handleLogClick = (e) => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+
+  const wrapper = btn.closest('.code-block-wrapper');
+  const code = wrapper.querySelector('code').innerText;
+  
+  copy(code);
+
+  const originalText = btn.innerHTML;
+  btn.classList.add('copied');
+  btn.innerText = 'COPIED!';
+  
+  setTimeout(() => {
+    btn.classList.remove('copied');
+    btn.innerHTML = originalText;
+  }, 2000);
+};
+
+const getIconClass = (msg) => {
+  if (msg.role === 'user') return 'user-icon';
+  if (msg.agent === 'Terminal') return 'terminal-icon';
+  if (msg.agent === 'Claude') return 'claude-icon';
+  return 'gemini-icon';
+};
 
 const scrollToBottom = async () => {
   await nextTick();
@@ -78,30 +118,43 @@ const scrollToBottom = async () => {
 
 watch(() => props.messages, scrollToBottom, { deep: true });
 watch(() => props.isThinking, scrollToBottom);
-
 onMounted(scrollToBottom);
 
-// Formatação básica de Markdown (Code blocks e Breaks)
+// Formatação com Syntax Highlighting Básica via CSS
 const formatMessage = (text) => {
   if (!text) return '';
   
-  // Escapar HTML básico
   let formatted = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // Blocos de código simples (```code```)
-  formatted = formatted.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  // Blocos de código com botão de cópia injetado
+  formatted = formatted.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+    return `<div class="code-block-wrapper">
+              <div class="code-header">
+                <span>${lang || 'code'}</span>
+                <button class="copy-btn">COPY</button>
+              </div>
+              <pre><code>${highlightSimple(code)}</code></pre>
+            </div>`;
+  });
   
-  // Código inline (`code`)
-  formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
-  
-  // Links (http://...)
+  // Código inline
+  formatted = formatted.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
   formatted = formatted.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
 
-  // Quebras de linha
   return formatted.replace(/\n/g, '<br>');
+};
+
+// Um "highlighter" ultra-simples que usa spans de CSS
+const highlightSimple = (code) => {
+  return code
+    .replace(/\b(func|package|const|var|import|return|if|else|for|switch|case|go|type|struct)\b/g, '<span class="hl-keyword">$1</span>')
+    .replace(/\b(string|int|bool|error|float64|interface|byte)\b/g, '<span class="hl-type">$1</span>')
+    .replace(/(".*?")/g, '<span class="hl-string">$1</span>')
+    .replace(/(\/\/.*)/g, '<span class="hl-comment">$1</span>')
+    .replace(/\b(\d+)\b/g, '<span class="hl-number">$1</span>');
 };
 </script>
 
@@ -109,214 +162,159 @@ const formatMessage = (text) => {
 .chat-log-container {
   flex: 1;
   overflow-y: auto;
-  padding: 40px 20px;
+  padding: 40px 24px;
   display: flex;
   flex-direction: column;
-  gap: 36px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
-  scroll-behavior: smooth;
+  gap: 32px;
+  scrollbar-width: none;
 }
+.chat-log-container::-webkit-scrollbar { display: none; }
 
 .message-row {
   display: flex;
   width: 100%;
-  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   opacity: 0;
-  transform: translateY(15px);
+  transform: translateY(20px);
 }
 
-@keyframes slideUp {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+@keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
 
-.message-row.user {
-  justify-content: flex-end;
-}
-
-.message-row.assistant {
-  justify-content: flex-start;
-}
+.message-row.user { justify-content: flex-end; }
+.message-row.assistant { justify-content: flex-start; }
 
 .message-bubble {
   max-width: 85%;
   display: flex;
-  gap: 20px;
+  gap: 16px;
   align-items: flex-start;
 }
-
-.user .message-bubble {
-  flex-direction: row-reverse;
-}
+.user .message-bubble { flex-direction: row-reverse; }
 
 .sender-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: transform 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
-.sender-icon:hover {
-  transform: scale(1.05);
-}
+.gemini-icon { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: #fff; }
+.claude-icon { background: linear-gradient(135deg, #064e3b 0%, #10b981 100%); color: #fff; }
+.terminal-icon { background: linear-gradient(135deg, #78350f 0%, #f59e0b 100%); color: #fff; }
+.user-icon { background: #f8fafc; color: #0f172a; }
 
-.glass-icon {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #60a5fa; /* A nice premium blue */
-  backdrop-filter: blur(10px);
-}
-
-.user-icon {
-  background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%);
-  color: #0f172a;
-}
-
-.message-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
+.message-content { min-width: 0; flex: 1; }
 
 .message-text {
   font-size: 15px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #f1f5f9;
-}
-
-.user .message-text {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.05) 100%);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  padding: 14px 20px;
-  border-radius: 20px 4px 20px 20px;
-  color: #f8fafc;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-}
-
-.assistant .message-text {
-  padding: 6px 0;
-  color: #cbd5e1;
-}
-
-.message-meta {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-top: 4px;
-}
-
-.agent-badge, .mode-badge {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 8px;
-}
-
-.agent-badge {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.2);
-}
-
-.mode-badge {
-  background: rgba(255, 255, 255, 0.05);
-  color: #94a3b8;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Code Styles - Sleek */
-:deep(pre) {
-  background: #09090b;
-  padding: 20px;
-  border-radius: 12px;
-  overflow-x: auto;
-  margin: 16px 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-:deep(code) {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-  font-size: 13.5px;
+  line-height: 1.65;
   color: #e2e8f0;
 }
 
-:deep(p > code) {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 3px 6px;
-  border-radius: 6px;
-  color: #93c5fd;
+.user .message-text {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  padding: 12px 18px;
+  border-radius: 18px 2px 18px 18px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
-:deep(a) {
+.system-message .message-text {
+  font-style: italic;
+  font-size: 13px;
+  color: #94a3b8;
+  border-left: 2px solid #3b82f6;
+  padding-left: 15px;
+}
+
+/* Syntax Highlighting */
+:deep(.code-block-wrapper) {
+  background: #0d0d0f;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  margin: 15px 0;
+  overflow: hidden;
+}
+:deep(.code-header) {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 14px;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #64748b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+:deep(.copy-btn) {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
   color: #60a5fa;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.2s;
-  border-bottom: 1px solid transparent;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 10px;
 }
 
-:deep(a:hover) {
+:deep(.copy-btn:hover) {
+  background: #3b82f6;
+  color: #fff;
+}
+
+:deep(.copy-btn.copied) {
+  background: #10b981;
+  border-color: #059669;
+  color: #fff;
+}
+:deep(pre) { padding: 16px; margin: 0; overflow-x: auto; }
+:deep(code) { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+
+:deep(.hl-keyword) { color: #f472b6; font-weight: bold; } /* Pinkish */
+:deep(.hl-string) { color: #a3e635; } /* Greenish */
+:deep(.hl-comment) { color: #64748b; font-style: italic; }
+:deep(.hl-number) { color: #fbbf24; }
+:deep(.hl-type) { color: #60a5fa; }
+
+:deep(.inline-code) {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
   color: #93c5fd;
-  border-bottom-color: #93c5fd;
 }
 
-/* Thinking Indicator */
+/* Thinking Waviness */
 .thinking-wrapper {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 16px;
+  border-radius: 4px 16px 16px 16px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 18px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px 16px 16px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.thinking-text {
-  font-size: 13px;
-  background: linear-gradient(90deg, #94a3b8, #cbd5e1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-weight: 500;
-  animation: pulseOpacity 2s infinite;
+.thinking-waves { display: flex; align-items: flex-end; gap: 3px; height: 12px; }
+.thinking-waves span {
+  width: 3px;
+  background: #3b82f6;
+  border-radius: 1px;
+  animation: waviness 1.2s infinite ease-in-out;
+}
+.thinking-waves span:nth-child(2) { animation-delay: 0.1s; }
+.thinking-waves span:nth-child(3) { animation-delay: 0.2s; }
+.thinking-waves span:nth-child(4) { animation-delay: 0.3s; }
+
+@keyframes waviness {
+  0%, 100% { height: 4px; opacity: 0.3; }
+  50% { height: 12px; opacity: 1; }
 }
 
-@keyframes pulseOpacity {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-
-.thinking-dots {
-  display: flex;
-  gap: 5px;
-}
-
-.thinking-dots span {
-  width: 5px;
-  height: 5px;
-  background: #60a5fa;
-  border-radius: 50%;
-  animation: gentleBounce 1.4s infinite ease-in-out both;
-}
-
-.thinking-dots span:nth-child(1) { animation-delay: -0.32s; }
-.thinking-dots span:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes gentleBounce {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-  40% { transform: translateY(-4px); opacity: 1; box-shadow: 0 4px 8px rgba(96, 165, 250, 0.5); }
-}
+.thinking-text { font-size: 13px; color: #94a3b8; font-weight: 500; }
 </style>
