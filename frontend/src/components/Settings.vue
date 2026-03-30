@@ -135,6 +135,44 @@ const getAuthStyle = (agent) => {
   }
   return 'border-color: var(--primary);'
 }
+
+const mcpName = ref('')
+const mcpCommand = ref('')
+const mcpServers = ref('')
+const showMcpList = ref(false)
+
+const generateGeminiMD = async () => {
+  if (window.go && window.go.main && window.go.main.App) {
+    const res = await window.go.main.App.GenerateGeminiMD()
+    alert(res)
+  }
+}
+
+const addMCPServer = async () => {
+  if (!mcpName.value || !mcpCommand.value) {
+    alert("Preencha o Nome e o Comando para o MCP")
+    return
+  }
+  installLogs.value = []
+  installStatus.value = `Instalando servidor MCP: ${mcpName.value}...`
+  scrollToConsole()
+  
+  if (window.go && window.go.main && window.go.main.App) {
+    const res = await window.go.main.App.AddMCPServer(mcpName.value, mcpCommand.value)
+    installStatus.value = "Instalação do MCP Finalizada."
+    mcpName.value = ''
+    mcpCommand.value = ''
+    alert("Retorno do Terminal:\n" + res)
+  }
+}
+
+const listMCPServers = async () => {
+  if (window.go && window.go.main && window.go.main.App) {
+    const res = await window.go.main.App.ListMCPServers()
+    mcpServers.value = res
+    showMcpList.value = true
+  }
+}
 </script>
 
 <template>
@@ -205,10 +243,16 @@ const getAuthStyle = (agent) => {
         </div>
 
 
-        <button @click="save" class="btn-premium save-btn">
-          <span>SALVAR ALTERAÇÕES</span>
-          <div class="btn-shimmer"></div>
-        </button>
+        <div style="display: flex; gap: 15px; margin-top: 1rem;">
+          <button @click="save" class="btn-premium save-btn">
+            <span>SALVAR ALTERAÇÕES</span>
+            <div class="btn-shimmer"></div>
+          </button>
+
+          <button @click="generateGeminiMD" class="tool-btn" style="flex: 1; border-color: rgba(59, 130, 246, 0.5); color: #93c5fd;">
+            GERAR GEMINI.MD (REGRAS)
+          </button>
+        </div>
       </section>
 
       <!-- Hub de Ferramentas -->
@@ -270,6 +314,45 @@ const getAuthStyle = (agent) => {
             <button @click="install('obsidian')" class="tool-btn">
               {{ status.tools.obsidian ? 'ATUALIZAR' : 'INSTALAR' }}
             </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Servidores MCP -->
+      <section class="tools-container" style="grid-column: 1 / -1; margin-top: 1rem;">
+        <h2 class="section-title">Integração MCP (Model Context Protocol)</h2>
+        <div class="glass premium-shadow panel-main" style="display: flex; flex-direction: column; gap: 1.5rem;">
+          
+          <div style="display: flex; gap: 1.5rem; align-items: flex-end;">
+            <div class="form-group" style="margin-bottom: 0; flex: 1;">
+              <label>Nome do Servidor (ex: github)</label>
+              <div class="input-wrapper">
+                <input v-model="mcpName" type="text" class="premium-input" placeholder="github" />
+                <div class="input-glow"></div>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0; flex: 2;">
+              <label>Comando de Execução (ex: npx -y @modelcontextprotocol/server-github)</label>
+              <div class="input-wrapper">
+                <input v-model="mcpCommand" type="text" class="premium-input" placeholder="npx -y @modelcontextprotocol/server-github" />
+                <div class="input-glow"></div>
+              </div>
+            </div>
+
+            <button @click="addMCPServer" class="tool-btn" style="height: 48px; border-color: var(--success); color: var(--success);">
+              ADICIONAR MCP
+            </button>
+          </div>
+
+          <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1.5rem;">
+            <button @click="listMCPServers" class="tool-btn" style="margin-bottom: 1rem;">
+              LISTAR SERVIDORES INSTALADOS
+            </button>
+
+            <div v-if="showMcpList" class="console-body" style="height: auto; max-height: 200px; padding: 1rem;">
+              <pre style="margin: 0; white-space: pre-wrap; color: #a1a1aa;">{{ mcpServers }}</pre>
+            </div>
           </div>
         </div>
       </section>

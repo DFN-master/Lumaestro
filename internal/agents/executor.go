@@ -27,6 +27,9 @@ type Executor struct {
 
 	// Canal para output bruto do terminal (bytes tagged por agente)
 	TerminalOutput chan TerminalData
+
+	// Modo Autônomo (--approval-mode=yolo)
+	AutonomousMode bool
 }
 
 // CLISession representa uma sessão interativa com uma CLI.
@@ -82,6 +85,9 @@ func (e *Executor) StartSession(ctx context.Context, agent string, sessionID str
 	args := []string{}
 	if agent == "gemini" {
 		args = append(args, "-r")
+		if e.AutonomousMode {
+			args = append(args, "--approval-mode=yolo")
+		}
 	}
 	fmt.Printf("[Maestro] Iniciando ConPTY para %s...\n", agent)
 	pty, err := StartConPTY(agent, args, 120, 40)
@@ -116,6 +122,40 @@ func (e *Executor) StartSession(ctx context.Context, agent string, sessionID str
 	// Goroutine que lê o PTY continuamente e emite bytes brutos
 	go e.readPTY(session)
 
+	return nil
+}
+
+// StartCustomSession inicia uma sessão ConPTY com comando e argumentos específicos (útil para login).
+func (e *Executor) StartCustomSession(ctx context.Context, agent string, binary string, args []string, sessionID string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if s, ok := e.ActiveSessions[sessionID]; ok {
+		if s.Pty != nil { s.Pty.Close() }
+		if s.Cancel != nil { s.Cancel() }
+		delete(e.ActiveSessions, sessionID)
+	}
+
+	_, cancel := context.WithCancel(ctx)
+
+	fmt.Printf("[Maestro] Iniciando ConPTY Custom (%s) para %s...\n", binary, agent)
+	// StartConPTY assume que o primeiro argumento é o binário e os outros são args
+	pty, err := StartConPTY(binary, args, 120, 40)
+	if err != nil {
+		cancel()
+		return fmt.Errorf("falha ao iniciar terminal custom: %v", err)
+	}
+
+	session := &CLISession{
+		ID:             sessionID,
+		AgentName:      agent,
+		Cancel:         cancel,
+		Pty:            pty,
+		IsOneShotProxy: false,
+	}
+	e.ActiveSessions[sessionID] = session
+
+	go e.readPTY(session)
 	return nil
 }
 

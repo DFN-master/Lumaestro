@@ -191,14 +191,10 @@ func (i *Installer) InstallObsidian() error {
 	return i.runStreaming("powershell", "-Command", script)
 }
 
-// SetupTool abre um terminal externo para configurar a CLI (fluxo de login interativo)
-func (i *Installer) SetupTool(name string) error {
-	// Agora priorizamos o comando global direto
-	binaryPath := name 
-	
-	// Verifica se o comando existe no PATH antes de tentar
+// GetSetupCommand retorna o binário e os argumentos necessários para configurar a IA interativamente.
+func (i *Installer) GetSetupCommand(name string) (string, []string) {
+	binaryPath := name
 	if _, err := exec.LookPath(name); err != nil {
-		// Se não tiver global, tenta achar o local legado
 		cwd, _ := os.Getwd()
 		localPath := filepath.Join(cwd, "node_modules", ".bin", name+".cmd")
 		if _, errS := os.Stat(localPath); errS == nil {
@@ -206,11 +202,24 @@ func (i *Installer) SetupTool(name string) error {
 		}
 	}
 
-	finalCmd := fmt.Sprintf("& '%s'", binaryPath)
+	var args []string
 	if name == "claude" {
-		finalCmd = fmt.Sprintf("& '%s' auth login", binaryPath)
+		args = []string{"auth", "login"}
 	} else if name == "gemini" {
-		finalCmd = fmt.Sprintf("$env:NO_BROWSER='true'; & '%s'", binaryPath)
+		// O login do Gemini abre o browser, mas precisamos do terminal para ver o link e confirmar
+		args = []string{"login"}
+	}
+
+	return binaryPath, args
+}
+
+// SetupTool abre um terminal externo para configurar a CLI (fluxo de login interativo) - Legado/Fallback.
+func (i *Installer) SetupTool(name string) error {
+	binaryPath, args := i.GetSetupCommand(name)
+	
+	finalCmd := fmt.Sprintf("& '%s' %s", binaryPath, strings.Join(args, " "))
+	if name == "gemini" {
+		finalCmd = fmt.Sprintf("$env:NO_BROWSER='true'; & '%s' login", binaryPath)
 	}
 
 	// Abre uma nova janela do PowerShell no Windows com o comando correto

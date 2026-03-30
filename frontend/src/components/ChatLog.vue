@@ -37,18 +37,19 @@
         </div>
         
         <div class="message-content">
-          <div class="message-text" v-html="formatMessage(msg.text)"></div>
+          <!-- Renderização Premium via Markdown-It -->
+          <div class="message-text markdown-body" v-html="renderMarkdown(msg.text)"></div>
           
-          <!-- Metadados (Apenas se não for sistema) -->
+          <!-- Metadados -->
           <div v-if="msg.role === 'assistant' && msg.agent && msg.mode !== 'system'" class="message-meta">
             <span class="agent-badge">{{ msg.agent }}</span>
-            <span class="mode-badge">Resumo</span>
+            <span v-if="isACP" class="mode-badge acp">ACP MODE</span>
           </div>
         </div>
       </div>
     </div>
     
-    <!-- Indicador de Digitação (Thinking) Premium -->
+    <!-- Indicador de Digitação (Thinking) -->
     <div v-if="isThinking" class="message-row assistant thinking">
       <div class="message-bubble">
         <div class="sender-icon assistant-icon pulsing">
@@ -60,7 +61,7 @@
            <div class="thinking-waves">
              <span></span><span></span><span></span><span></span>
            </div>
-           <div class="thinking-text">Orquestrando...</div>
+           <div class="thinking-text">Harmonizando...</div>
         </div>
       </div>
     </div>
@@ -70,16 +71,47 @@
 <script setup>
 import { ref, watch, onMounted, nextTick } from 'vue';
 import { useClipboard } from '@vueuse/core';
+import MarkdownIt from 'markdown-it';
 
 const props = defineProps({
   messages: { type: Array, required: true },
-  isThinking: { type: Boolean, default: false }
+  isThinking: { type: Boolean, default: false },
+  isACP: { type: Boolean, default: true }
 });
+
+const md = new MarkdownIt({
+    html: true,
+    linkify: true,
+    typographer: true,
+});
+
+// Custom Rule para blocos de código com botão de cópia
+const defaultRender = md.renderer.rules.fence || function(tokens, idx, options, env, self) {
+    return self.renderToken(tokens, idx, options);
+};
+
+md.renderer.rules.fence = function (tokens, idx, options, env, self) {
+    const token = tokens[idx];
+    const code = token.content.trim();
+    const lang = token.info.trim();
+    
+    return `<div class="code-block-wrapper">
+              <div class="code-header">
+                <span>${lang || 'code'}</span>
+                <button class="copy-btn">COPY</button>
+              </div>
+              <pre><code>${md.utils.escapeHtml(code)}</code></pre>
+            </div>`;
+};
 
 const { copy } = useClipboard();
 const logContainer = ref(null);
 
-// Delegação de evento para o botão de COPY
+const renderMarkdown = (text) => {
+    if (!text) return '';
+    return md.render(text);
+};
+
 const handleLogClick = (e) => {
   const btn = e.target.closest('.copy-btn');
   if (!btn) return;
@@ -119,43 +151,6 @@ const scrollToBottom = async () => {
 watch(() => props.messages, scrollToBottom, { deep: true });
 watch(() => props.isThinking, scrollToBottom);
 onMounted(scrollToBottom);
-
-// Formatação com Syntax Highlighting Básica via CSS
-const formatMessage = (text) => {
-  if (!text) return '';
-  
-  let formatted = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  // Blocos de código com botão de cópia injetado
-  formatted = formatted.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
-    return `<div class="code-block-wrapper">
-              <div class="code-header">
-                <span>${lang || 'code'}</span>
-                <button class="copy-btn">COPY</button>
-              </div>
-              <pre><code>${highlightSimple(code)}</code></pre>
-            </div>`;
-  });
-  
-  // Código inline
-  formatted = formatted.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-  formatted = formatted.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank">$1</a>');
-
-  return formatted.replace(/\n/g, '<br>');
-};
-
-// Um "highlighter" ultra-simples que usa spans de CSS
-const highlightSimple = (code) => {
-  return code
-    .replace(/\b(func|package|const|var|import|return|if|else|for|switch|case|go|type|struct)\b/g, '<span class="hl-keyword">$1</span>')
-    .replace(/\b(string|int|bool|error|float64|interface|byte)\b/g, '<span class="hl-type">$1</span>')
-    .replace(/(".*?")/g, '<span class="hl-string">$1</span>')
-    .replace(/(\/\/.*)/g, '<span class="hl-comment">$1</span>')
-    .replace(/\b(\d+)\b/g, '<span class="hl-number">$1</span>');
-};
 </script>
 
 <style scoped>
@@ -231,7 +226,20 @@ const highlightSimple = (code) => {
   padding-left: 15px;
 }
 
-/* Syntax Highlighting */
+/* Markdown Premium Styles */
+:deep(.markdown-body) {
+  color: #e2e8f0;
+}
+:deep(.markdown-body p) { margin-bottom: 16px; }
+:deep(.markdown-body h1, .markdown-body h2) { margin-top: 24px; margin-bottom: 16px; font-weight: 800; color: #fff; }
+:deep(.markdown-body h1) { font-size: 1.5rem; }
+:deep(.markdown-body h2) { font-size: 1.25rem; }
+:deep(.markdown-body ul, .markdown-body ol) { padding-left: 24px; margin-bottom: 16px; }
+:deep(.markdown-body li) { margin-bottom: 8px; }
+:deep(.markdown-body table) { width: 100%; border-collapse: collapse; margin-bottom: 16px; background: rgba(255, 255, 255, 0.03); border-radius: 8px; overflow: hidden; }
+:deep(.markdown-body th, .markdown-body td) { border: 1px solid rgba(255, 255, 255, 0.08); padding: 10px 14px; text-align: left; }
+:deep(.markdown-body th) { background: rgba(255, 255, 255, 0.05); color: #fff; font-weight: 800; }
+
 :deep(.code-block-wrapper) {
   background: #0d0d0f;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -262,32 +270,10 @@ const highlightSimple = (code) => {
   transition: all 0.2s;
   font-size: 10px;
 }
-
-:deep(.copy-btn:hover) {
-  background: #3b82f6;
-  color: #fff;
-}
-
-:deep(.copy-btn.copied) {
-  background: #10b981;
-  border-color: #059669;
-  color: #fff;
-}
+:deep(.copy-btn:hover) { background: #3b82f6; color: #fff; }
+:deep(.copy-btn.copied) { background: #10b981; border-color: #059669; color: #fff; }
 :deep(pre) { padding: 16px; margin: 0; overflow-x: auto; }
 :deep(code) { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-
-:deep(.hl-keyword) { color: #f472b6; font-weight: bold; } /* Pinkish */
-:deep(.hl-string) { color: #a3e635; } /* Greenish */
-:deep(.hl-comment) { color: #64748b; font-style: italic; }
-:deep(.hl-number) { color: #fbbf24; }
-:deep(.hl-type) { color: #60a5fa; }
-
-:deep(.inline-code) {
-  background: rgba(255, 255, 255, 0.08);
-  padding: 2px 6px;
-  border-radius: 4px;
-  color: #93c5fd;
-}
 
 /* Thinking Waviness */
 .thinking-wrapper {
@@ -317,4 +303,11 @@ const highlightSimple = (code) => {
 }
 
 .thinking-text { font-size: 13px; color: #94a3b8; font-weight: 500; }
+
+/* ACP Badge */
+.mode-badge.acp {
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+    border-color: rgba(139, 92, 246, 0.2);
+}
 </style>

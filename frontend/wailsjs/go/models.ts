@@ -1,5 +1,54 @@
+export namespace agents {
+	
+	export class SessionInfo {
+	    sessionId: string;
+	    cwd: string;
+	    title?: string;
+	    updatedAt?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.cwd = source["cwd"];
+	        this.title = source["title"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+
+}
+
 export namespace config {
 	
+	export class SecurityConfig {
+	    allow_read: boolean;
+	    allow_write: boolean;
+	    allow_create: boolean;
+	    allow_delete: boolean;
+	    allow_move: boolean;
+	    allow_run_commands: boolean;
+	    full_machine_access: boolean;
+	    workspaces: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SecurityConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.allow_read = source["allow_read"];
+	        this.allow_write = source["allow_write"];
+	        this.allow_create = source["allow_create"];
+	        this.allow_delete = source["allow_delete"];
+	        this.allow_move = source["allow_move"];
+	        this.allow_run_commands = source["allow_run_commands"];
+	        this.full_machine_access = source["full_machine_access"];
+	        this.workspaces = source["workspaces"];
+	    }
+	}
 	export class Config {
 	    obsidian_vault_path: string;
 	    qdrant_url: string;
@@ -9,6 +58,7 @@ export namespace config {
 	    use_claude_api_key: boolean;
 	    active_agent: string;
 	    auto_start_agents: string[];
+	    security: SecurityConfig;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -24,7 +74,26 @@ export namespace config {
 	        this.use_claude_api_key = source["use_claude_api_key"];
 	        this.active_agent = source["active_agent"];
 	        this.auto_start_agents = source["auto_start_agents"];
+	        this.security = this.convertValues(source["security"], SecurityConfig);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

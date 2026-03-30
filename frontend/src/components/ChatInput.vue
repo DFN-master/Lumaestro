@@ -1,54 +1,77 @@
 <template>
   <div class="chat-input-container">
-    <div class="chat-input-wrapper">
-      <!-- Toolbar interna do input -->
+    <div class="chat-input-wrapper glass">
+      <!-- Toolbar Premium -->
       <div class="input-toolbar">
-        <div class="selector-group">
-          <label>Assistant</label>
-          <select v-model="selectedAgent" class="premium-select">
-            <option value="gemini">Gemini CLI</option>
-            <option value="claude">Claude Code</option>
-          </select>
-        </div>
-        <div class="selector-group" style="margin-left: auto;">
-          <div class="mode-toggle">
+        <div class="toolbar-left">
+          <div class="agent-switcher">
             <button 
-              type="button"
+              type="button" 
+              :class="{ active: selectedAgent === 'gemini' }" 
+              @click="selectedAgent = 'gemini'"
+            >
+              <span class="dot gemini"></span> Gemini
+            </button>
+            <button 
+              type="button" 
+              :class="{ active: selectedAgent === 'claude' }" 
+              @click="selectedAgent = 'claude'"
+            >
+              <span class="dot claude"></span> Claude
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar-right">
+          <!-- Toggle Modo Autônomo Premium -->
+          <div class="safety-toggle" @click="isAutonomous = !isAutonomous; toggleAutonomous()">
+            <span class="toggle-label">Autônomo</span>
+            <div class="switch" :class="{ on: isAutonomous }">
+              <div class="handle"></div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Mode Toggle (Act/Chat) -->
+          <div class="mode-pills">
+            <button 
+              type="button" 
               :class="{ active: mode === 'act' }" 
               @click="mode = 'act'"
-              title="A IA pode alterar arquivos"
             >Act</button>
             <button 
-              type="button"
+              type="button" 
               :class="{ active: mode === 'chat' }" 
               @click="mode = 'chat'"
-              title="Apenas conversa"
             >Chat</button>
           </div>
         </div>
       </div>
 
-      <!-- Área de Texto -->
-      <div class="textarea-wrapper">
+      <!-- Área de Texto e Enviar -->
+      <div class="textarea-section">
         <textarea
           ref="textarea"
           v-model="messageText"
-          placeholder="Peça ao Maestro para construir algo..."
+          placeholder="Comande o Maestro para construir algo extraordinário..."
           @keydown.enter.prevent="handleEnter"
           :disabled="isThinking"
           :rows="1"
         ></textarea>
         
-        <button 
-          class="send-btn" 
-          :disabled="!messageText.trim() || isThinking"
-          @click="sendMessage"
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-        </button>
+        <div class="actions">
+          <button 
+            class="send-btn" 
+            :disabled="!messageText.trim() || isThinking"
+            @click="sendMessage"
+            :class="{ ready: messageText.trim() && !isThinking }"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M7 11L12 6L17 11M12 18V7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -61,12 +84,19 @@ const messageText = ref('');
 const selectedAgent = ref('gemini');
 const mode = ref('act');
 const textarea = ref(null);
+const isAutonomous = ref(false);
 
 const props = defineProps({
   isThinking: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['send']);
+
+const toggleAutonomous = async () => {
+  if (window.go && window.go.main && window.go.main.App) {
+    await window.go.main.App.SetAutonomousMode(isAutonomous.value);
+  }
+};
 
 const adjustHeight = () => {
   if (!textarea.value) return;
@@ -79,141 +109,166 @@ watch(messageText, () => {
 });
 
 const handleEnter = (e) => {
-  if (!e.shiftKey) {
-    sendMessage();
-  }
+  if (!e.shiftKey) sendMessage();
 };
 
 const sendMessage = () => {
   if (props.isThinking) return;
-
   const text = messageText.value.trim();
   if (!text) return;
   
-  emit('send', {
-    text: text,
-    agent: selectedAgent.value,
-    mode: mode.value
-  });
-  
+  emit('send', { text, agent: selectedAgent.value, mode: mode.value });
   messageText.value = '';
-  nextTick(() => {
-    if (textarea.value) textarea.value.style.height = 'auto';
-  });
+  nextTick(() => { if (textarea.value) textarea.value.style.height = 'auto'; });
 };
 </script>
 
 <style scoped>
 .chat-input-container {
-  padding: 0;
-  background: transparent;
   width: 100%;
+  padding: 0;
+  margin-top: auto;
 }
 
 .chat-input-wrapper {
-  width: 100%;
-  margin: 0;
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(40px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px; /* Reduzido o raio para combinar com o padding menor */
-  padding: 4px 12px; /* Reduzido drasticamente */
-  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
+  border-radius: 20px;
+  padding: 12px;
+  box-shadow: 
+    0 30px 60px -12px rgba(0, 0, 0, 0.5),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .chat-input-wrapper:focus-within {
-  border-color: rgba(96, 165, 250, 0.4);
-  box-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 4px rgba(59, 130, 246, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(15, 23, 42, 0.7);
+  box-shadow: 
+    0 40px 80px -20px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(59, 130, 246, 0.2);
 }
 
 .input-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 4px; /* Reduzido para 4px */
-  padding-bottom: 4px; /* Reduzido para 4px */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  flex-wrap: nowrap;
-  min-width: 0;
+  padding-bottom: 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.selector-group {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+.toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 14px; }
 
-.selector-group label {
-  font-size: 10px; /* Reduzi 1px */
-  color: #c0c0c0; /* Mais brilhante para contraste */
-  font-weight: 800; /* Mais negrito */
+.label {
+  font-size: 10px;
+  font-weight: 800;
+  color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 1.2px;
-  white-space: nowrap; /* Impede que quebre linha */
+  letter-spacing: 1.5px;
 }
 
-.premium-select {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #f1f5f9;
-  font-size: 13px;
-  padding: 6px 14px;
-  border-radius: 10px;
-  outline: none;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: inherit;
-  font-weight: 500;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-}
-
-.premium-select:hover, .premium-select:focus {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-.mode-toggle {
+.agent-switcher {
   display: flex;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 4px;
-  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 3px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.mode-toggle button {
-  padding: 6px 16px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 8px;
-  color: #94a3b8;
-  border: none;
+.agent-switcher button {
   background: transparent;
+  border: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  padding: 5px 12px;
+  border-radius: 7px;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
 }
 
-.mode-toggle button:hover {
-  color: #e2e8f0;
+.agent-switcher button.active {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.mode-toggle button.active {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.1) 100%);
+.dot { width: 5px; height: 5px; border-radius: 50%; }
+.dot.gemini { background: #60a5fa; box-shadow: 0 0 6px #3b82f6; }
+.dot.claude { background: #34d399; box-shadow: 0 0 6px #10b981; }
+
+/* Safety Toggle (Switch) */
+.safety-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 100px;
+  transition: all 0.2s;
+}
+.safety-toggle:hover { background: rgba(255, 255, 255, 0.03); }
+
+.toggle-label { font-size: 11px; font-weight: 700; color: #94a3b8; }
+
+.switch {
+  width: 32px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 100px;
+  position: relative;
+  transition: all 0.3s;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.switch.on { background: #3b82f6; border-color: #60a5fa; }
+
+.handle {
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  transition: all 0.3s cubic-bezier(0.17, 0.67, 0.83, 0.67);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.switch.on .handle { left: 16px; }
+
+.divider { width: 1px; height: 16px; background: rgba(255, 255, 255, 0.1); }
+
+/* Mode Pills */
+.mode-pills { display: flex; gap: 4px; }
+.mode-pills button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #64748b;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.mode-pills button.active {
+  background: rgba(59, 130, 246, 0.1);
   color: #60a5fa;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
-.textarea-wrapper {
+/* Textarea Section */
+.textarea-section {
   display: flex;
   align-items: flex-end;
-  gap: 16px;
-  position: relative;
+  gap: 12px;
   padding: 4px;
 }
 
@@ -221,55 +276,44 @@ textarea {
   flex: 1;
   background: transparent;
   border: none;
-  color: #f8fafc;
-  font-size: 15.5px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 15px;
   line-height: 1.6;
+  color: #f1f5f9;
   resize: none;
   outline: none;
-  padding: 4px 0; /* Reduzido de 8px */
-  max-height: 300px;
-  font-family: 'Inter', system-ui, sans-serif;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  max-height: 250px;
+  padding: 8px 0;
 }
 
-textarea::placeholder {
-  color: #64748b;
-  font-weight: 400;
-}
+textarea::placeholder { color: #475569; font-weight: 400; }
 
 .send-btn {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: white;
-  border: none;
-  width: 40px; /* Reduzido de 44px */
-  height: 40px; /* Reduzido de 44px */
-  border-radius: 12px; /* Mais proporcional ao novo tamanho */
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #475569;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  margin-bottom: 0px; /* Removida margem inferior */
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   flex-shrink: 0;
-  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
 }
 
-.send-btn:hover:not(:disabled) {
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.45);
+.send-btn.ready {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+  box-shadow: 0 4px 15px rgba(255, 255, 255, 0.25);
 }
 
-.send-btn:active:not(:disabled) {
-  transform: translateY(1px) scale(0.95);
+.send-btn.ready:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 255, 255, 0.4);
 }
 
-.send-btn:disabled {
-  background: rgba(255, 255, 255, 0.05);
-  color: #475569;
-  cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
-}
+.send-btn:disabled { cursor: not-allowed; opacity: 0.5; }
 </style>

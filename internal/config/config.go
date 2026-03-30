@@ -5,16 +5,29 @@ import (
 	"os"
 )
 
+// SecurityConfig define as permissões granulares para a IA
+type SecurityConfig struct {
+	AllowRead        bool     `json:"allow_read"`
+	AllowWrite       bool     `json:"allow_write"`
+	AllowCreate      bool     `json:"allow_create"`
+	AllowDelete      bool     `json:"allow_delete"`
+	AllowMove        bool     `json:"allow_move"`
+	AllowRunCommands bool     `json:"allow_run_commands"`
+	FullMachineAccess bool     `json:"full_machine_access"` // Se falso, restringe aos Workspaces
+	Workspaces       []string `json:"workspaces"`          // Lista de pastas autorizadas (Whitelist)
+}
+
 // Config representa as configurações globais do orquestrador.
 type Config struct {
-	ObsidianVaultPath string `json:"obsidian_vault_path"`
-	QdrantURL         string `json:"qdrant_url"`
-	GeminiAPIKey       string `json:"gemini_api_key"`
-	UseGeminiAPIKey    bool   `json:"use_gemini_api_key"`
-	ClaudeAPIKey       string `json:"claude_api_key"`
-	UseClaudeAPIKey    bool   `json:"use_claude_api_key"`
-	ActiveAgent       string   `json:"active_agent"`        // Agente padrão para o Chat
-	AutoStartAgents   []string `json:"auto_start_agents"`   // CLIs que ligam junto com o app (ex: ["gemini","claude"])
+	ObsidianVaultPath string         `json:"obsidian_vault_path"`
+	QdrantURL         string         `json:"qdrant_url"`
+	GeminiAPIKey      string         `json:"gemini_api_key"`
+	UseGeminiAPIKey   bool           `json:"use_gemini_api_key"`
+	ClaudeAPIKey      string         `json:"claude_api_key"`
+	UseClaudeAPIKey   bool           `json:"use_claude_api_key"`
+	ActiveAgent       string         `json:"active_agent"`
+	AutoStartAgents   []string       `json:"auto_start_agents"`
+	Security          SecurityConfig `json:"security"`
 }
 
 const configPath = "config.json"

@@ -1,18 +1,24 @@
 <script setup>
 import { storeToRefs } from 'pinia'
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useOrchestratorStore } from '../stores/orchestrator'
 import ChatInput from './ChatInput.vue'
 import ChatLog from './ChatLog.vue'
 import TerminalView from './TerminalView.vue'
+import ReviewBlock from './ReviewBlock.vue'
 
 // --- Uso da Store (Pinia) ---
 const orchestrator = useOrchestratorStore()
-const { messages, isThinking, isTerminalMode, activeAgent, runningSessions } = storeToRefs(orchestrator)
+const { messages, isThinking, isTerminalMode, activeAgent, runningSessions, pendingReview } = storeToRefs(orchestrator)
 
 // --- Estados Locais de UI ---
 const logContainer = ref(null)
 const showRawTerminal = ref(false)
+
+// Se o modo terminal for ativado na store, forçamos a exibição aqui
+watch(isTerminalMode, (newVal) => {
+  if (newVal) showRawTerminal.value = true
+}, { immediate: true })
 
 // Inicializa a escuta de eventos do Backend Go
 onMounted(() => {
@@ -43,11 +49,19 @@ const sendChatMessage = async (payload) => {
   }
 
   // Envio Padrão
-  if (isTerminalMode.value) {
-    await orchestrator.sendInput(activeAgent.value, text)
+  const targetAgent = payload.agent || 'gemini'
+  const isActMode = payload.mode === 'act'
+
+  if (isActMode) {
+    // Garante que a sessão está ativa antes de enviar
+    if (!runningSessions.value.includes(targetAgent)) {
+      await orchestrator.startSession(targetAgent)
+      // Pequeno delay para a sessão inicializar no backend
+      await new Promise(r => setTimeout(r, 500))
+    }
+    await orchestrator.sendInput(targetAgent, text)
   } else {
-    // Agora passa o agente que vem no payload do input (gemini, claude, etc)
-    const targetAgent = payload.agent || 'gemini'
+    // Modo CHAT (Legacy/RAG) - Sem PTY, apenas requisição direta
     await orchestrator.ask(targetAgent, text)
   }
 }
@@ -61,6 +75,9 @@ const handleSessionEnded = (agent) => {
   <div class="chat-panel-parent">
     <!-- Grade de Fundo Sutil -->
     <div class="panel-grain"></div>
+
+    <!-- Sistema de Revisão de Segurança (ACP Hands) -->
+    <ReviewBlock v-if="pendingReview" :review="pendingReview" />
 
     <header class="panel-header glass">
       <div class="header-left">
@@ -80,6 +97,13 @@ const handleSessionEnded = (agent) => {
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
             <line x1="8" y1="21" x2="16" y2="21"></line>
             <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </button>
+
+        <!-- Botão Discreto de Histórico (Relógio/Lista) -->
+        <button @click="orchestrator.toggleSidebar()" class="action-btn" :class="{ 'btn-active': orchestrator.isSidebarOpen }" title="Expandir Histórico de Sinfonias">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
         </button>
         

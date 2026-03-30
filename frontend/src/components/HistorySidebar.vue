@@ -1,0 +1,244 @@
+<script setup>
+import { computed, onMounted } from 'vue';
+import { useOrchestratorStore } from '../stores/orchestrator';
+
+const store = useOrchestratorStore();
+
+const formatRelativeTime = (dateStr) => {
+  if (!dateStr) return 'Sem data';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now - date) / 1000);
+
+  if (diffInSeconds < 60) return 'Agora mesmo';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m atrás`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h atrás`;
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d atrás`;
+  
+  return date.toLocaleDateString();
+};
+
+const handleNewSession = async () => {
+  if (store.activeAgent) {
+    await store.newSession(store.activeAgent);
+  }
+};
+
+const handleLoadSession = async (sessionId) => {
+  if (store.activeAgent) {
+    await store.loadSession(store.activeAgent, sessionId);
+  }
+};
+
+onMounted(async () => {
+  if (store.activeAgent) {
+    await store.fetchSessions(store.activeAgent);
+  }
+});
+</script>
+
+<template>
+  <aside class="history-sidebar glass">
+    <div class="sidebar-header">
+      <h2 class="title">Sinfonias</h2>
+      <button @click="handleNewSession" class="new-btn" title="Nova Sinfonia">
+        <span class="icon">+</span>
+      </button>
+    </div>
+
+    <div class="sessions-list scroll-shadows">
+      <div v-if="store.sessions.length === 0" class="empty-state">
+        Nenhuma sinfonia gravada ainda.
+      </div>
+      
+      <div 
+        v-for="session in store.sessions" 
+        :key="session.sessionId"
+        class="session-item"
+        :class="{ active: store.currentACPID === session.sessionId }"
+        @click="handleLoadSession(session.sessionId)"
+      >
+        <div class="session-info">
+          <div class="session-title">{{ session.title || 'Conversa sem título' }}</div>
+          <div class="session-meta">
+            <span class="id-badge">{{ session.sessionId.substring(0, 8) }}</span>
+            <span class="time">{{ formatRelativeTime(session.updatedAt) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="agent-badge" v-if="store.activeAgent">
+        <span class="pulse-dot"></span>
+        {{ store.activeAgent.toUpperCase() }} ON
+      </div>
+    </div>
+  </aside>
+</template>
+
+<style scoped>
+.history-sidebar {
+  width: 250px;
+  height: calc(100vh - 40px);
+  margin: 20px 0 20px 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: rgba(13, 17, 23, 0.4);
+  backdrop-filter: blur(8px);
+  border-right: 1px solid rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.sidebar-header {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.title {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(139, 148, 158, 0.6);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.new-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(139, 148, 158, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.new-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sessions-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(139, 148, 158, 0.4);
+  font-style: italic;
+}
+
+.session-item {
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.session-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.session-item.active {
+  background: rgba(30, 41, 59, 0.4);
+  border-color: rgba(56, 189, 248, 0.1);
+}
+
+.session-title {
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(240, 246, 252, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.session-item.active .session-title {
+  color: #38bdf8;
+}
+
+.session-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.id-badge {
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  color: rgba(139, 148, 158, 0.4);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.time {
+  font-size: 10px;
+  color: rgba(139, 148, 158, 0.5);
+}
+
+.sidebar-footer {
+  padding: 12px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.agent-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: rgba(139, 148, 158, 0.6);
+}
+
+.pulse-dot {
+  width: 5px;
+  height: 5px;
+  background: #238636;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(35, 134, 54, 0.3);
+}
+
+/* Custom Scrollbar */
+.sessions-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sessions-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sessions-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+</style>

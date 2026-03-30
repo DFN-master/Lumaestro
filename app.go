@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"os/exec"
 	"time"
 	"Lumaestro/internal/agents"
 	"Lumaestro/internal/config"
@@ -17,7 +19,8 @@ import (
 // App struct
 type App struct {
 	ctx       context.Context
-	executor  *agents.Executor
+	executor  *agents.ACPExecutor
+	legacyExec *agents.Executor // Apenas para ExecuteCLI fallback se necessário, ou podemos migrar.
 	ontology  *provider.OntologyService
 	crawler   *obsidian.Crawler
 	qdrant    *provider.QdrantClient
@@ -35,7 +38,8 @@ func NewApp() *App {
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	a.executor = agents.NewExecutor()
+	a.executor = agents.NewACPExecutor()
+	a.legacyExec = agents.NewExecutor() // Mantemos temporariamente para métodos legacy
 	a.installer = tools.NewInstaller()
 
 	// Sincroniza o PATH imediatamente (Garante que claude/gemini sejam encontrados)
@@ -49,19 +53,13 @@ func (a *App) startup(ctx context.Context) {
 	go a.listenForInstallerLogs()
 	go a.listenForTerminalOutput()
 
-	// 🚀 Auto-Start: Inicia os agentes favoritos automaticamente no boot se configurados
-	if a.config != nil && len(a.config.AutoStartAgents) > 0 {
-		for _, agent := range a.config.AutoStartAgents {
-			agentCopy := agent
-			go func() {
-				time.Sleep(1500 * time.Millisecond)
-				a.StartAgentSession(agentCopy)
-			}()
-		}
-	} else if a.config != nil && a.config.ActiveAgent != "" {
+	// 🚀 Auto-Start: Inicia os agentes favoritos automaticamente no boot
+	if a.config != nil && a.config.GeminiAPIKey != "" {
 		go func() {
-			time.Sleep(1500 * time.Millisecond)
-			a.StartAgentSession(a.config.ActiveAgent)
+			time.Sleep(2000 * time.Millisecond)
+			fmt.Println("[BOOT] Gemini API Key detectada. Restaurando última Sinfonia...")
+			// Se não passarmos nada, o StartAgentSession vai tentar carregar a última
+			a.StartAgentSession("gemini")
 		}()
 	}
 }
@@ -87,13 +85,13 @@ func (a *App) initServices() error {
 	search := rag.NewSearchService(a.qdrant)
 	nav := rag.NewGraphNavigator(a.qdrant)
 	
-	a.chat = rag.NewChatService(a.executor, search, nav, a.embedder, a.installer)
+	a.chat = rag.NewChatService(a.legacyExec, search, nav, a.embedder, a.installer)
 	a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
 
 	return nil
 }
 
-// listenForLogs ouve o Executor (Logs da IA)
+// listenForLogs ouve o Executor ACP (Logs da IA no formato JSON-RPC via STDOUT)
 func (a *App) listenForLogs() {
 	for log := range a.executor.LogChan {
 		runtime.EventsEmit(a.ctx, "agent:log", log)
@@ -107,16 +105,13 @@ func (a *App) listenForInstallerLogs() {
 	}
 }
 
-// listenForTerminalOutput ouve os bytes brutos do ConPTY e envia para o xterm.js.
-// Os dados são encodados em base64 para transporte seguro via Wails Events.
+// listenForTerminalOutput (Descontinuado para Renderização no Modo ACP, mantido para evitar quebra)
 func (a *App) listenForTerminalOutput() {
 	for td := range a.executor.TerminalOutput {
 		if td.Data == nil {
-			// Sessão encerrada — notifica o frontend com o nome do agente
 			runtime.EventsEmit(a.ctx, "terminal:closed", td.Agent)
 			continue
 		}
-		// Encoda em base64 e envia com tag do agente
 		encoded := base64.StdEncoding.EncodeToString(td.Data)
 		runtime.EventsEmit(a.ctx, "terminal:output", map[string]string{
 			"agent": td.Agent,
@@ -128,7 +123,7 @@ func (a *App) listenForTerminalOutput() {
 // AskAgent processa a pergunta em segundo plano para permitir Streaming Real
 func (a *App) AskAgent(agentName string, prompt string) string {
 	fmt.Printf("[BACKEND] AskAgent chamado para: %s com prompt: %s\n", agentName, prompt)
-	// Garante que os serviços estejam prontos
+	// No modo TUDO ACP, as perguntas normais deverão ser injetadas na sessão principal ACP!
 	if a.chat == nil {
 		if err := a.initServices(); err != nil {
 			return "⚠️ O motor do Maestro está desligado. Por favor, verifique sua Gemini API Key nas configurações."
@@ -139,13 +134,13 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 		agentName = "gemini"
 	}
 
-	// Notifica o frontend de que este agente agora é o Ativo para o chat
-	runtime.EventsEmit(a.ctx, "terminal:started", map[string]interface{}{
-		"agent":      agentName,
-		"isRealPTY":  false,
-	})
+	// Modo Legado AskAgent (RAG)
+	if a.chat == nil {
+		if err := a.initServices(); err != nil {
+			return "⚠️ O motor do Maestro está desligado. Por favor, verifique sua Gemini API Key nas configurações."
+		}
+	}
 
-	// Executa em uma goroutine para não travar o frontend
 	go func() {
 		fmt.Printf("[BACKEND] Iniciando chamada de Chat para: %s\n", agentName)
 		response, err := a.chat.Ask(a.ctx, agentName, prompt)
@@ -159,7 +154,6 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 		}
 
 		fmt.Printf("[BACKEND] Resposta da IA recebida (%d chars). Emitindo evento...\n", len(response))
-		// Emite a resposta final para o chat
 		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 			"role":    "assistant",
 			"agent":   agentName,
@@ -247,7 +241,7 @@ func (a *App) SaveConfig(cfg config.Config) string {
 	return "Configurações salvas e serviços reiniciados!"
 }
 
-// SetupTool abre um terminal para configuração interativa
+// SetupTool abre um terminal externo - Legado.
 func (a *App) SetupTool(name string) string {
 	err := a.installer.SetupTool(name)
 	if err != nil {
@@ -256,71 +250,152 @@ func (a *App) SetupTool(name string) string {
 	return "Janela de configuração aberta!"
 }
 
-// ============================================================
-// TERMINAL REAL — ConPTY + xterm.js Bidirectional
-// ============================================================
+// StartLoginSession inicia uma sessão de terminal interativa interna para login.
+func (a *App) StartLoginSession(agent string) string {
+	binary, args := a.installer.GetSetupCommand(agent)
+	sessionID := "login-session-" + agent
 
-// StartAgentSession inicia uma sessão interativa (Terminal Mode com ConPTY real).
-// O frontend deve escutar o evento "terminal:output" para receber bytes brutos.
-func (a *App) StartAgentSession(agent string) string {
-	sessionID := agent // Cada agente tem sua própria sessão!
-
-	err := a.executor.StartSession(a.ctx, agent, sessionID)
+	err := a.legacyExec.StartCustomSession(a.ctx, agent, binary, args, sessionID)
 	if err != nil {
-		return "Erro ao iniciar sessão: " + err.Error()
-	}
-
-	isReal := a.executor.IsTerminalSession(sessionID)
-	mode := "ONE-SHOT PROXY"
-	if isReal {
-		mode = "CONPTY REAL"
+		return "Erro ao iniciar sessão de login: " + err.Error()
 	}
 
 	runtime.EventsEmit(a.ctx, "terminal:started", map[string]interface{}{
 		"agent":     agent,
-		"mode":      mode,
-		"isRealPTY": isReal,
+		"mode":      "Configuração/Login",
+		"isRealPTY": true,
 	})
 
-	return fmt.Sprintf("Sessão %s iniciada [%s]", agent, mode)
+	return "Sessão de login iniciada no terminal interno."
 }
 
-// SendAgentInput envia texto para o agente ativo.
-// No modo ConPTY, os bytes são escritos direto no PTY (como teclado real).
-func (a *App) SendAgentInput(agent string, input string) string {
-	err := a.executor.SendInput(agent, input)
-	if err != nil {
-		return "Erro ao enviar input: " + err.Error()
+// ============================================================
+// TERMINAL ACP — JSON RPC 2.0 (O CÉREBRO)
+// ============================================================
+
+// StartAgentSession inicia a CLI do Gemini em modo seguro ACP (JSON RPC 2.0).
+func (a *App) StartAgentSession(agent string) error {
+	fmt.Printf("[App] Iniciando agente: %s\n", agent)
+	// No Lumaestro, mantemos um ID de controle estável por agente na UI.
+	sessionID := "acp-session-" + agent
+	
+	// No primeiro boot ou reinício, passamos loadSessionID como "LATEST" para carregar a última Sinfonia.
+	return a.executor.StartSession(a.ctx, agent, sessionID, "LATEST")
+}
+
+// ListAgentSessions retorna a lista de conversas salvas para o agente
+func (a *App) ListAgentSessions(agent string) ([]agents.SessionInfo, error) {
+	sessionID := "acp-session-" + agent
+	a.executor.Mu.Lock()
+	session, ok := a.executor.ActiveSessions[sessionID]
+	a.executor.Mu.Unlock()
+	
+	if !ok {
+		return nil, fmt.Errorf("inicie o agente antes de listar o histórico")
 	}
-	return "OK"
+
+	return a.executor.ListSessions(session)
 }
 
-// SendTerminalData envia bytes brutos (base64) para o PTY do agente especificado.
+// LoadAgentSession encerra a atual e carrega uma antiga (Checkpoint)
+func (a *App) LoadAgentSession(agent string, acpSessionID string) error {
+	fmt.Printf("[App] Trocando para sessão: %s\n", acpSessionID)
+	sessionID := "acp-session-" + agent
+	return a.executor.StartSession(a.ctx, agent, sessionID, acpSessionID)
+}
+
+// NewAgentSession força a criação de um novo chat (limpa o contexto)
+func (a *App) NewAgentSession(agent string) error {
+	fmt.Println("[App] Iniciando NOVO chat (limpando contexto)...")
+	sessionID := "acp-session-" + agent
+	return a.executor.StartSession(a.ctx, agent, sessionID, "")
+}
+
+// SendAgentInput via prompt RPC na sessão ACP.
+func (a *App) SendAgentInput(agent string, input string) error {
+	sessionID := "acp-session-" + agent
+	err := a.executor.SendInput(sessionID, input)
+	if err != nil {
+		return fmt.Errorf("erro ao enviar input para ACP: %v", err)
+	}
+	return nil
+}
+
+// SendTerminalData está descontinuado fisicamente no ACP, retorna erro.
 func (a *App) SendTerminalData(agent string, base64Data string) string {
-	data, err := base64.StdEncoding.DecodeString(base64Data)
-	if err != nil {
-		return "Erro ao decodificar: " + err.Error()
-	}
-
-	err = a.executor.SendRawInput(agent, data)
-	if err != nil {
-		return "Erro: " + err.Error()
-	}
-	return "OK"
+	return "Não suportado em modo ACP"
 }
 
-// ResizeTerminal informa ao ConPTY as novas dimensões do xterm.js.
+// ResizeTerminal não faz mais sentido visual no ACP. Ignoramos graciosamente.
 func (a *App) ResizeTerminal(agent string, cols int, rows int) {
-	a.executor.ResizePTY(agent, cols, rows)
+	// Ignored on JSON RPC mode.
 }
 
-// StopAgentSession encerra a sessão de um agente específico.
-func (a *App) StopAgentSession(agent string) string {
-	err := a.executor.StopSession(agent)
+// StopAgentSession encerra a sessão ativa.
+func (a *App) StopAgentSession(agent string) error {
+	sessionID := "acp-session-" + agent
+	err := a.executor.StopSession(sessionID)
 	if err != nil {
-		return "Nenhuma sessão ativa encontrada ou erro: " + err.Error()
+		return fmt.Errorf("nenhuma sessão ativa ACP encontrada para %s", agent)
 	}
 
 	runtime.EventsEmit(a.ctx, "terminal:closed", agent)
-	return "Sessão " + agent + " encerrada com sucesso."
+	return nil
+}
+
+// ============================================================
+// NOVAS INTEGRAÇÕES (Autonomia, Regras e MCP)
+// ============================================================
+
+// SetAutonomousMode ativa ou desativa globalmente o modo YOLO
+func (a *App) SetAutonomousMode(enabled bool) string {
+	a.executor.AutonomousMode = enabled
+	if enabled {
+		return "Modo Autônomo ATIVADO. Executará tarefas de terminal sem permissão (Comandos destrutivos ainda requerem review de Hands Security)."
+	}
+	return "Modo Autônomo DESATIVADO. A CLI voltará a pedir aprovação."
+}
+
+// SubmitReview aprova ou rejeita uma ação pendente da IA
+func (a *App) SubmitReview(id string, approved bool) {
+	a.executor.SubmitReview(id, approved)
+}
+
+// GenerateGeminiMD cria um arquivo base GEMINI.md no diretório atual
+func (a *App) GenerateGeminiMD() string {
+	content := `# Project Instructions
+
+Você agora está sendo orquestrado pelo Lumaestro (Modo ACP).
+
+- **Manejo de Arquivos**: O Backend ditará suas permissões. Se receber "Acesso Negado", pergunte ao usuário.
+- **Autonomia Limitada**: Só prossiga ativamente se a sessão permitir.
+
+`
+	err := os.WriteFile("GEMINI.md", []byte(content), 0644)
+	if err != nil {
+		return "Erro ao gerar arquivo de contexto: " + err.Error()
+	}
+	return "Contexto GEMINI.md gerado com sucesso no diretório atual!"
+}
+
+// AddMCPServer instala um novo servidor MCP na CLI local
+func (a *App) AddMCPServer(name string, command string) string {
+	cmd := exec.Command("cmd", "/c", "gemini", "mcp", "add", name, command)
+	output, err := cmd.CombinedOutput()
+	
+	if err != nil {
+		return fmt.Sprintf("Erro ao adicionar MCP: %s\nOutput: %s", err.Error(), string(output))
+	}
+	return fmt.Sprintf("MCP '%s' adicionado com sucesso!\n%s", name, string(output))
+}
+
+// ListMCPServers retorna a lista de MCPs instalados
+func (a *App) ListMCPServers() string {
+	cmd := exec.Command("cmd", "/c", "gemini", "mcp", "list")
+	output, err := cmd.CombinedOutput()
+	
+	if err != nil {
+		return fmt.Sprintf("Erro ao listar MCPs: %s\nOutput: %s", err.Error(), string(output))
+	}
+	return string(output)
 }

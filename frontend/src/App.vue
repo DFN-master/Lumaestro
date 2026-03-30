@@ -4,8 +4,11 @@ import { CheckConnection } from '../wailsjs/go/main/App'
 import { EventsOn } from '../wailsjs/runtime'
 import ChatPanel from './components/ChatPanel.vue'
 import GraphVisualizer from './components/GraphVisualizer.vue'
+import HistorySidebar from './components/HistorySidebar.vue'
 import Settings from './components/Settings.vue'
+import { useOrchestratorStore } from './stores/orchestrator'
 
+const orchestrator = useOrchestratorStore()
 const currentView = ref('orchestrator') // views: orchestrator, settings
 const isOnline = ref(false)
 
@@ -54,6 +57,11 @@ onMounted(async () => {
   // Verificar conexão inicial
   isOnline.value = await CheckConnection()
   
+  // Escuta troca de visualização remota (ex: vindo das Settings)
+  EventsOn('view:change', (view) => {
+    currentView.value = view
+  })
+
   // Escuta os logs em tempo real
   EventsOn('agent:log', (log) => {
     const lastLog = state.logs[state.logs.length - 1]
@@ -111,6 +119,11 @@ onMounted(async () => {
             <span></span><span></span><span></span>
           </div>
         </div>
+
+        <!-- Barra de Histórico (ACP Capable) - Retrátil -->
+        <Transition name="slide">
+          <HistorySidebar v-if="orchestrator.isSidebarOpen" />
+        </Transition>
 
         <aside class="glass chat-area" :style="{ width: chatWidth + 'px', minWidth: chatWidth + 'px' }">
           <ChatPanel />
@@ -275,5 +288,20 @@ nav button.active {
   height: 4px;
   border-radius: 50%;
   background: var(--primary);
+}
+
+/* ── Transição Sidebar (Modo Gaveta) ── */
+.slide-enter-active,
+.slide-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(-30px);
+  opacity: 0;
+  max-width: 0;
+  margin-right: 0;
 }
 </style>
