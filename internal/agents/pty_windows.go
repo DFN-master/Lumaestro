@@ -41,21 +41,22 @@ func StartConPTY(command string, args []string, cols, rows int) (*ConPTYSession,
 		return nil, fmt.Errorf("falha ao criar ConPTY: %w", err)
 	}
 
-	// Resolve o caminho do executável (Prioriza Local do Lumaestro)
+	// Resolve o caminho do executável (Prioriza GLOBAL via PATH)
 	var cmdPath string
 	cwd, _ := os.Getwd()
 	
-	// Tenta binário local (.cmd para Windows)
-	localBin := filepath.Join(cwd, "node_modules", ".bin", command+".cmd")
-	if _, err := os.Stat(localBin); err == nil {
-		cmdPath = localBin
+	// Tenta achar no PATH do sistema primeiro (Recomendado: npm install -g)
+	globalPath, errLook := exec.LookPath(command)
+	if errLook == nil {
+		cmdPath = globalPath
 	} else {
-		// Fallback para o PATH do sistema
-		var errLook error
-		cmdPath, errLook = exec.LookPath(command)
-		if errLook != nil {
+		// Fallback para binário local do projeto (.cmd para Windows)
+		localBin := filepath.Join(cwd, "node_modules", ".bin", command+".cmd")
+		if _, err := os.Stat(localBin); err == nil {
+			cmdPath = localBin
+		} else {
 			cpty.Close()
-			return nil, fmt.Errorf("executável '%s' não encontrado localmente nem no PATH: %w", command, errLook)
+			return nil, fmt.Errorf("executável '%s' não encontrado globalmente nem localmente: %w", command, errLook)
 		}
 	}
 
@@ -97,9 +98,10 @@ func StartConPTY(command string, args []string, cols, rows int) (*ConPTYSession,
 		spawnCmd = "C:\\Windows\\System32\\cmd.exe"
 	}
 	
-	// Prepara o comando final. O /c executa o script e encerra, mas como o Gemini/Claude 
-	// são interativos, o processo se manterá aberto dentro do PTY.
-	spawnArgs := []string{spawnCmd, "/c", cmdPath}
+	// Prepara o comando final. 
+	// Robusteza Visual: No Windows, usamos o CMD /C CALL para evitar que o conpty
+	// e o cmd.exe entrem em conflito e escapem aspas indevidamente em caminhos com espaço.
+	spawnArgs := []string{spawnCmd, "/c", "call", cmdPath}
 	
 	if len(args) > 0 {
 		spawnArgs = append(spawnArgs, args...)

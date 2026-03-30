@@ -155,16 +155,25 @@ nav button {
   background: transparent;
   border: none;
   font-size: 1.4rem;
-  color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.3);
   margin-bottom: 30px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 8px;
+  border-radius: 10px;
+  position: relative;
+}
+
+nav button:hover {
+  background: rgba(59, 130, 246, 0.08);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 nav button.active {
-  color: #00f2fe;
-  transform: scale(1.3);
-  filter: drop-shadow(0 0 8px #4facfe);
+  color: white;
+  background: rgba(59, 130, 246, 0.12);
+  transform: scale(1.05);
+  box-shadow: inset 0 0 12px rgba(79, 172, 254, 0.15);
 }
 
 .status-indicator {

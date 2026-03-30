@@ -23,18 +23,22 @@ func NewInstaller() *Installer {
 	}
 }
 
-// CheckStatus verifica se um comando está disponível localmente (node_modules/.bin) ou no PATH.
+// CheckStatus verifica se um comando está disponível no PATH do sistema.
 func (i *Installer) CheckStatus(name string) bool {
-	// Primeiro, tenta achar o binário local do projeto (Windows .cmd)
+	// Prioridade total para o PATH do sistema agora que usamos -g
+	_, err := exec.LookPath(name)
+	if err == nil {
+		return true
+	}
+
+	// Fallback apenas para manter retrocompatibilidade com instalações locais antigas
 	cwd, _ := os.Getwd()
 	localBin := filepath.Join(cwd, "node_modules", ".bin", name+".cmd")
 	if _, err := os.Stat(localBin); err == nil {
 		return true
 	}
 	
-	// Fallback para o PATH do sistema
-	_, err := exec.LookPath(name)
-	return err == nil
+	return false
 }
 
 // CheckClaudeAuth verifica silenciosamente se já existe uma sessão de login ativa do Claude (OAuth) no sistema.
@@ -88,22 +92,22 @@ func (i *Installer) runStreaming(name string, args ...string) error {
 	return cmd.Wait()
 }
 
-// InstallGemini CLI via NPM Local (Tudo pelo Lumaestro).
+// InstallGemini CLI via NPM Global.
 func (i *Installer) InstallGemini() error {
-	i.LogChan <- "📦 Instalando Gemini CLI localmente no Lumaestro..."
+	i.LogChan <- "📦 Instalando Gemini CLI globalmente no sistema..."
 	if runtime.GOOS == "windows" {
-		return i.runStreaming("cmd", "/C", "npm install @google/gemini-cli@latest --force")
+		return i.runStreaming("cmd", "/C", "npm install -g @google/gemini-cli@latest --force")
 	}
-	return i.runStreaming("npm", "install", "@google/gemini-cli@latest", "--force")
+	return i.runStreaming("npm", "install", "-g", "@google/gemini-cli@latest", "--force")
 }
 
-// InstallClaude CLI via NPM Local (Tudo pelo Lumaestro).
+// InstallClaude CLI via NPM Global.
 func (i *Installer) InstallClaude() error {
-	i.LogChan <- "📦 Instalando Claude Code localmente no Lumaestro..."
+	i.LogChan <- "📦 Instalando Claude Code globalmente no sistema..."
 	if runtime.GOOS == "windows" {
-		return i.runStreaming("cmd", "/C", "npm install @anthropic-ai/claude-code@latest --force")
+		return i.runStreaming("cmd", "/C", "npm install -g @anthropic-ai/claude-code@latest --force")
 	}
-	return i.runStreaming("npm", "install", "@anthropic-ai/claude-code@latest", "--force")
+	return i.runStreaming("npm", "install", "-g", "@anthropic-ai/claude-code@latest", "--force")
 }
 
 // SyncPath injeta caminhos comuns (Claude e NPM) no PATH do processo atual.
@@ -189,20 +193,23 @@ func (i *Installer) InstallObsidian() error {
 
 // SetupTool abre um terminal externo para configurar a CLI (fluxo de login interativo)
 func (i *Installer) SetupTool(name string) error {
-	// Resolve o caminho do binário local para o terminal externo
-	cwd, _ := os.Getwd()
-	binaryPath := filepath.Join(cwd, "node_modules", ".bin", name+".cmd")
+	// Agora priorizamos o comando global direto
+	binaryPath := name 
 	
-	// Se o binário local não existir, tenta o global como fallback
-	if _, err := os.Stat(binaryPath); err != nil {
-		binaryPath = name 
+	// Verifica se o comando existe no PATH antes de tentar
+	if _, err := exec.LookPath(name); err != nil {
+		// Se não tiver global, tenta achar o local legado
+		cwd, _ := os.Getwd()
+		localPath := filepath.Join(cwd, "node_modules", ".bin", name+".cmd")
+		if _, errS := os.Stat(localPath); errS == nil {
+			binaryPath = localPath
+		}
 	}
 
 	finalCmd := fmt.Sprintf("& '%s'", binaryPath)
 	if name == "claude" {
 		finalCmd = fmt.Sprintf("& '%s' auth login", binaryPath)
 	} else if name == "gemini" {
-		// Força o modo sem navegador para evitar erros de permissão no OAuth
 		finalCmd = fmt.Sprintf("$env:NO_BROWSER='true'; & '%s'", binaryPath)
 	}
 

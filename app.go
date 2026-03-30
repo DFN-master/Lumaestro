@@ -126,7 +126,8 @@ func (a *App) listenForTerminalOutput() {
 }
 
 // AskAgent processa a pergunta em segundo plano para permitir Streaming Real
-func (a *App) AskAgent(prompt string) string {
+func (a *App) AskAgent(agentName string, prompt string) string {
+	fmt.Printf("[BACKEND] AskAgent chamado para: %s com prompt: %s\n", agentName, prompt)
 	// Garante que os serviços estejam prontos
 	if a.chat == nil {
 		if err := a.initServices(); err != nil {
@@ -134,22 +135,36 @@ func (a *App) AskAgent(prompt string) string {
 		}
 	}
 
-	cfg, _ := config.Load()
-	agentName := "gemini"
-	if cfg != nil && cfg.ActiveAgent != "" {
-		agentName = cfg.ActiveAgent
+	if agentName == "" {
+		agentName = "gemini"
 	}
 
+	// Notifica o frontend de que este agente agora é o Ativo para o chat
+	runtime.EventsEmit(a.ctx, "terminal:started", map[string]interface{}{
+		"agent":      agentName,
+		"isRealPTY":  false,
+	})
+
 	// Executa em uma goroutine para não travar o frontend
-	// O retorno real virá linha a linha via Evento "agent:log"
 	go func() {
-		_, err := a.chat.Ask(a.ctx, agentName, prompt)
+		fmt.Printf("[BACKEND] Iniciando chamada de Chat para: %s\n", agentName)
+		response, err := a.chat.Ask(a.ctx, agentName, prompt)
 		if err != nil {
+			fmt.Printf("[BACKEND] ERRO no Chat: %v\n", err)
 			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 				"source":  "ERROR",
 				"content": "❌ Falha na Sinfonia: " + err.Error(),
 			})
+			return
 		}
+
+		fmt.Printf("[BACKEND] Resposta da IA recebida (%d chars). Emitindo evento...\n", len(response))
+		// Emite a resposta final para o chat
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"role":    "assistant",
+			"agent":   agentName,
+			"content": response,
+		})
 	}()
 
 	return "Orquestrando..."

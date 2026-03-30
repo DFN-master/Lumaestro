@@ -171,7 +171,8 @@ func (e *Executor) SendInput(sessionID string, input string) error {
 
 	// Modo Terminal Real — escreve bytes brutos no PTY (como digitar no teclado)
 	if session.Pty != nil && !session.IsOneShotProxy {
-		_, err := session.Pty.Write([]byte(input))
+		// No Windows PTY, precisa adicionar o \r para simular a tecla Enter
+		_, err := session.Pty.Write([]byte(input + "\r"))
 		return err
 	}
 
@@ -182,10 +183,15 @@ func (e *Executor) SendInput(sessionID string, input string) error {
 			cwd, _ := os.Getwd()
 			binaryName := session.AgentName
 			
-			// Tenta binário local para Windows
-			localBin := filepath.Join(cwd, "node_modules", ".bin", binaryName+".cmd")
-			if _, err := os.Stat(localBin); err == nil {
-				binaryName = localBin
+			// Prioridade total para o GLOBAL agora que usamos -g
+			if globalPath, errGL := exec.LookPath(binaryName); errGL == nil {
+				binaryName = globalPath
+			} else {
+				// Fallback para binário local legado
+				localBin := filepath.Join(cwd, "node_modules", ".bin", binaryName+".cmd")
+				if _, err := os.Stat(localBin); err == nil {
+					binaryName = localBin
+				}
 			}
 
 			if session.AgentName == "claude" {
@@ -193,7 +199,7 @@ func (e *Executor) SendInput(sessionID string, input string) error {
 			} else {
 				cmd = exec.CommandContext(context.Background(), binaryName, "-p", input)
 			}
-			cmd.Dir = filepath.Dir(localBin) // DIRETÓRIO DE TRABALHO
+			cmd.Dir = filepath.Dir(binaryName) // DIRETÓRIO DE TRABALHO DO EXECUTÁVEL COMPLETO
 
 			// Injeção de Variáveis
 			cmd.Env = os.Environ()
@@ -326,10 +332,15 @@ func (e *Executor) ExecuteCLI(ctx context.Context, agent string, contextData str
 	cwd, _ := os.Getwd()
 	binaryName := agent
 	
-	// Tenta binário local para Windows
-	localBin := filepath.Join(cwd, "node_modules", ".bin", binaryName+".cmd")
-	if _, err := os.Stat(localBin); err == nil {
-		binaryName = localBin
+	// Prioridade total para o GLOBAL via PATH
+	if globalPath, errGL := exec.LookPath(binaryName); errGL == nil {
+		binaryName = globalPath
+	} else {
+		// Fallback para binário local legado
+		localBin := filepath.Join(cwd, "node_modules", ".bin", binaryName+".cmd")
+		if _, err := os.Stat(localBin); err == nil {
+			binaryName = localBin
+		}
 	}
 
 	if agent == "claude" {

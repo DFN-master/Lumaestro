@@ -44,9 +44,11 @@ const sendChatMessage = async (payload) => {
 
   // Envio Padrão
   if (isTerminalMode.value) {
-    await orchestrator.sendInput(text)
+    await orchestrator.sendInput(activeAgent.value, text)
   } else {
-    await orchestrator.ask(text)
+    // Agora passa o agente que vem no payload do input (gemini, claude, etc)
+    const targetAgent = payload.agent || 'gemini'
+    await orchestrator.ask(targetAgent, text)
   }
 }
 

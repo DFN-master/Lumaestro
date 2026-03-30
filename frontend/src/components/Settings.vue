@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { GetConfig, SaveConfig, GetToolsStatus, InstallTool, SetupTool } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 
@@ -10,8 +10,28 @@ const config = ref({
   use_gemini_api_key: false,
   claude_api_key: '',
   use_claude_api_key: false,
-  active_agent: 'gemini'
+  active_agent: 'gemini',
+  auto_start_agents: []
 })
+
+// Helpers para auto-start toggles
+const isAutoStart = (agent) => {
+  return (config.value.auto_start_agents || []).includes(agent)
+}
+
+const toggleAutoStart = async (agent) => {
+  if (!config.value.auto_start_agents) {
+    config.value.auto_start_agents = []
+  }
+  const idx = config.value.auto_start_agents.indexOf(agent)
+  if (idx >= 0) {
+    config.value.auto_start_agents.splice(idx, 1)
+  } else {
+    config.value.auto_start_agents.push(agent)
+  }
+  // Salva imediatamente para ser persistente
+  await SaveConfig(config.value)
+}
 
 const status = ref({
   qdrant: false,
@@ -27,6 +47,19 @@ const status = ref({
 const installLogs = ref([])
 const installStatus = ref('')
 const logContainer = ref(null)
+
+const scrollToConsole = async () => {
+  await nextTick()
+  setTimeout(() => {
+    const view = document.querySelector('.settings-view')
+    if (view) {
+      view.scrollTo({
+        top: view.scrollHeight,
+        behavior: 'smooth'
+      })
+    }
+  }, 100)
+}
 
 onMounted(async () => {
   const savedConfig = await GetConfig()
@@ -55,6 +88,7 @@ const refreshStatus = async () => {
 const fixEnv = async () => {
   installLogs.value = []
   installStatus.value = "Iniciando correção de ambiente..."
+  scrollToConsole()
   // @ts-ignore
   const res = await window.go.main.App.FixEnvironment()
   installStatus.value = res
@@ -68,15 +102,22 @@ const save = async () => {
 }
 
 const install = async (name) => {
-  installLogs.value = []
-  installStatus.value = `Iniciando instalação de ${name}...`
-  const res = await InstallTool(name)
-  installStatus.value = res
+  try {
+    installLogs.value = []
+    installStatus.value = `Iniciando operação para ${name}...`
+    scrollToConsole()
+
+    const res = await InstallTool(name)
+    installStatus.value = res ? res : "Operação finalizada."
+  } catch (err) {
+    installStatus.value = `ERRO Crítico: ${err}`
+  }
   refreshStatus()
 }
 
 const setup = async (name) => {
   installStatus.value = `Abrindo terminal de configuração para ${name}...`
+  scrollToConsole()
   const res = await SetupTool(name)
   installStatus.value = res
 }
@@ -181,6 +222,10 @@ const getAuthStyle = (agent) => {
               <h3>Gemini CLI</h3>
             </div>
             <p>IA generativa rápida e eficiente.</p>
+            <div v-if="status.tools.gemini" class="autostart-toggle" @click="toggleAutoStart('gemini')">
+              <div class="autostart-dot" :class="{ 'on': isAutoStart('gemini') }"></div>
+              <span>{{ isAutoStart('gemini') ? 'Inicia com o App ✓' : 'Iniciar com o App' }}</span>
+            </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
               <button @click="install('gemini')" class="tool-btn">
                 {{ status.tools.gemini ? 'ATUALIZAR' : 'INSTALAR' }}
@@ -198,6 +243,10 @@ const getAuthStyle = (agent) => {
               <h3>Claude Code</h3>
             </div>
             <p>Codificação autônoma de elite.</p>
+            <div v-if="status.tools.claude" class="autostart-toggle" @click="toggleAutoStart('claude')">
+              <div class="autostart-dot" :class="{ 'on': isAutoStart('claude') }"></div>
+              <span>{{ isAutoStart('claude') ? 'Inicia com o App ✓' : 'Iniciar com o App' }}</span>
+            </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
               <button @click="install('claude')" class="tool-btn">
                 {{ status.tools.claude ? 'ATUALIZAR' : 'INSTALAR' }}
@@ -227,7 +276,7 @@ const getAuthStyle = (agent) => {
     </div>
 
     <!-- Console Section -->
-    <footer class="console-section" v-if="installStatus || installLogs.length > 0">
+    <footer class="console-section" v-show="installStatus !== '' || installLogs.length > 0">
       <div class="console-header glass">
         <div class="header-left">
           <div class="console-icon"></div>
@@ -502,6 +551,44 @@ label {
   box-shadow: 0 0 12px var(--success);
 }
 
+/* Auto-Start Toggle */
+.autostart-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  margin-bottom: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #94a3b8;
+  user-select: none;
+}
+
+.autostart-toggle:hover {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #e2e8f0;
+}
+
+.autostart-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #334155;
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+
+.autostart-dot.on {
+  background: var(--success);
+  box-shadow: 0 0 10px var(--success);
+}
+
 .tool-card p {
   color: var(--text-dim);
   font-size: 0.85rem;
@@ -617,6 +704,19 @@ label {
   margin-top: 1rem;
   border-top: 1px solid var(--border-color);
   padding-top: 0.5rem;
+}
+
+/* Destaque quando o console está processando */
+.console-section {
+  transition: all 0.5s ease;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.console-section:has(.animate-pulse) {
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.2);
+  transform: translateY(-5px);
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 @keyframes pulse {
