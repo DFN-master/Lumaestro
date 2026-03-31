@@ -44,6 +44,16 @@
             :agent="msg.agent" 
           />
 
+          <!-- Renderização de Imagens (Usuário) -->
+          <div v-if="msg.images && msg.images.length > 0" class="message-images">
+            <img 
+              v-for="(img, idx) in msg.images" 
+              :key="idx" 
+              :src="'data:' + (img.type || 'image/png') + ';base64,' + img.data" 
+              class="chat-image"
+            />
+          </div>
+
           <!-- Renderização Premium via Markdown-It -->
           <div v-if="msg.text" class="message-text markdown-body" v-html="renderMarkdown(msg.text)"></div>
           
@@ -164,10 +174,10 @@ onMounted(scrollToBottom);
 .chat-log-container {
   flex: 1;
   overflow-y: auto;
-  padding: 40px 24px;
+  padding: 20px 12px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 20px;
   scrollbar-width: none;
 }
 .chat-log-container::-webkit-scrollbar { display: none; }
@@ -186,7 +196,7 @@ onMounted(scrollToBottom);
 .message-row.assistant { justify-content: flex-start; }
 
 .message-bubble {
-  max-width: 85%;
+  max-width: 96%;
   display: flex;
   gap: 16px;
   align-items: flex-start;
@@ -238,48 +248,48 @@ onMounted(scrollToBottom);
   color: #e2e8f0;
 }
 :deep(.markdown-body p) { 
-  margin-bottom: 1.25rem; 
-  line-height: 1.75;
+  margin-bottom: 0.85rem; 
+  line-height: 1.6;
 }
 :deep(.markdown-body h1) { 
-  margin-top: 2rem; 
-  margin-bottom: 1rem; 
+  margin-top: 1.25rem; 
+  margin-bottom: 0.75rem; 
   font-weight: 800; 
   color: #fff; 
-  font-size: 1.6rem;
-  letter-spacing: -0.5px;
+  font-size: 1.4rem;
+  letter-spacing: -0.4px;
 }
 :deep(.markdown-body h2) { 
-  margin-top: 1.75rem; 
-  margin-bottom: 0.85rem; 
+  margin-top: 1rem; 
+  margin-bottom: 0.6rem; 
   font-weight: 700; 
   color: #f1f5f9; 
-  font-size: 1.3rem; 
+  font-size: 1.2rem; 
 }
 :deep(.markdown-body ul, .markdown-body ol) { 
-  padding-left: 24px; 
-  margin-bottom: 1.5rem; 
+  padding-left: 20px; 
+  margin-bottom: 1rem; 
 }
 :deep(.markdown-body li) { 
-  margin-bottom: 10px; 
+  margin-bottom: 6px; 
 }
 :deep(.markdown-body hr) {
   border: none;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), transparent);
-  margin: 2.5rem 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  margin: 1.5rem 0;
 }
 :deep(.markdown-body table) { 
   width: 100%; 
   border-collapse: collapse; 
-  margin-bottom: 2rem; 
+  margin-bottom: 1.5rem; 
   background: rgba(255, 255, 255, 0.03); 
   border-radius: 8px; 
   overflow: hidden; 
 }
 :deep(.markdown-body th, .markdown-body td) { 
   border: 1px solid rgba(255, 255, 255, 0.08); 
-  padding: 12px 16px; 
+  padding: 10px 14px; 
   text-align: left; 
 }
 :deep(.markdown-body th) { background: rgba(255, 255, 255, 0.05); color: #fff; font-weight: 800; }
@@ -288,7 +298,7 @@ onMounted(scrollToBottom);
   background: #0d0d0f;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  margin: 15px 0;
+  margin: 10px 0;
   overflow: hidden;
 }
 :deep(.code-header) {
@@ -347,5 +357,31 @@ onMounted(scrollToBottom);
 }
 
 .thinking-text { font-size: 13px; color: #94a3b8; font-weight: 500; }
+
+/* 🖼️ Estilo Premium para Imagens no Chat */
+.message-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
+.chat-image {
+  max-width: 320px;
+  max-height: 240px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  object-fit: cover;
+  cursor: zoom-in;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s;
+}
+
+.chat-image:hover {
+  transform: scale(1.02);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 255, 255, 0.2);
+}
 
 </style>

@@ -49,6 +49,14 @@
         </div>
       </div>
 
+      <!-- Previews de Imagem (Miniaturas) -->
+      <div v-if="attachedImages.length > 0" class="image-previews-container">
+        <div v-for="(img, idx) in attachedImages" :key="idx" class="image-preview-card">
+          <img :src="img.preview" />
+          <button class="remove-img" @click="removeImage(idx)">×</button>
+        </div>
+      </div>
+
       <!-- Área de Texto e Enviar -->
       <div class="textarea-section">
         <textarea
@@ -56,6 +64,7 @@
           v-model="messageText"
           placeholder="Comande o Maestro para construir algo extraordinário..."
           @keydown.enter.prevent="handleEnter"
+          @paste="handlePaste"
           :disabled="isThinking"
           :rows="1"
         ></textarea>
@@ -63,9 +72,9 @@
         <div class="actions">
           <button 
             class="send-btn" 
-            :disabled="!messageText.trim() || isThinking"
+            :disabled="(!messageText.trim() && attachedImages.length === 0) || isThinking"
             @click="sendMessage"
-            :class="{ ready: messageText.trim() && !isThinking }"
+            :class="{ ready: (messageText.trim() || attachedImages.length > 0) && !isThinking }"
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M7 11L12 6L17 11M12 18V7" stroke-linecap="round" stroke-linejoin="round"/>
@@ -85,12 +94,35 @@ const selectedAgent = ref('gemini');
 const mode = ref('act');
 const textarea = ref(null);
 const isAutonomous = ref(false);
+const attachedImages = ref([]); // [{ preview, base64, type }]
 
 const props = defineProps({
   isThinking: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['send']);
+
+const handlePaste = async (e) => {
+  const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+  for (const item of items) {
+    if (item.type.indexOf('image') !== -1) {
+      const file = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        attachedImages.value.push({
+          preview: event.target.result,
+          base64: event.target.result.split(',')[1],
+          type: file.type
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+};
+
+const removeImage = (idx) => {
+  attachedImages.value.splice(idx, 1);
+};
 
 const toggleAutonomous = async () => {
   if (window.go && window.go.main && window.go.main.App) {
@@ -115,10 +147,13 @@ const handleEnter = (e) => {
 const sendMessage = () => {
   if (props.isThinking) return;
   const text = messageText.value.trim();
-  if (!text) return;
+  const images = attachedImages.value.map(img => ({ data: img.base64, type: img.type }));
   
-  emit('send', { text, agent: selectedAgent.value, mode: mode.value });
+  if (!text && images.length === 0) return;
+  
+  emit('send', { text, agent: selectedAgent.value, mode: mode.value, images });
   messageText.value = '';
+  attachedImages.value = [];
   nextTick(() => { if (textarea.value) textarea.value.style.height = 'auto'; });
 };
 </script>
@@ -264,6 +299,63 @@ const sendMessage = () => {
   border-color: rgba(59, 130, 246, 0.3);
 }
 
+/* Previews de Imagem */
+.image-previews-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.image-preview-card {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.image-preview-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-img {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s;
+}
+
+.remove-img:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  transform: scale(1.1);
+}
+
 /* Textarea Section */
 .textarea-section {
   display: flex;
@@ -289,8 +381,8 @@ textarea {
 textarea::placeholder { color: #475569; font-weight: 400; }
 
 .send-btn {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
   color: #475569;
@@ -301,6 +393,7 @@ textarea::placeholder { color: #475569; font-weight: 400; }
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   flex-shrink: 0;
+  margin-bottom: 4px;
 }
 
 .send-btn.ready {
@@ -316,4 +409,9 @@ textarea::placeholder { color: #475569; font-weight: 400; }
 }
 
 .send-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+
+@keyframes popIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
 </style>

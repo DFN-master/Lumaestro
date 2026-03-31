@@ -9,6 +9,8 @@ export function AskAgent(arg1:string,arg2:string):Promise<string>;
 
 export function CheckConnection():Promise<boolean>;
 
+export function ConsolidateChatKnowledge(arg1:string):Promise<string>;
+
 export function FixEnvironment():Promise<string>;
 
 export function GenerateGeminiMD():Promise<string>;
@@ -33,7 +35,7 @@ export function SaveConfig(arg1:config.Config):Promise<string>;
 
 export function ScanVault():Promise<string>;
 
-export function SendAgentInput(arg1:string,arg2:string):Promise<void>;
+export function SendAgentInput(arg1:string,arg2:string,arg3:Array<Record<string, string>>):Promise<void>;
 
 export function SendTerminalData(arg1:string,arg2:string):Promise<string>;
 

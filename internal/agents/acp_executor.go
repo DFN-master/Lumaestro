@@ -535,11 +535,16 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			content, err := h.Executor.Proxy.ReadFile(p.Path)
-			if err == nil {
-				result = map[string]string{"content": content}
+			cfg, _ := config.Load()
+			if cfg.Security.AllowRead {
+				content, err := h.Executor.Proxy.ReadFile(p.Path)
+				if err == nil {
+					result = map[string]string{"content": content}
+				} else {
+					rpcErr = &RPCError{Code: -32000, Message: err.Error()}
+				}
 			} else {
-				rpcErr = &RPCError{Code: -32000, Message: err.Error()}
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ LEITURA BLOQUEADA: Ative 'Permitir Leitura' nas configurações."}
 			}
 		}
 
@@ -549,11 +554,33 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Content string `json:"content"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			err := h.Executor.Proxy.WriteFile(p.Path, p.Content)
-			if err == nil {
-				result = map[string]bool{"success": true}
+			cfg, _ := config.Load()
+			if cfg.Security.AllowWrite {
+				// Se for um arquivo crítico ou se Acesso Global estiver desligado, pedir review
+				needsReview := !cfg.Security.FullMachineAccess || strings.HasSuffix(p.Path, ".go") || strings.HasSuffix(p.Path, ".json")
+				
+				if needsReview {
+					if h.Executor.RequestReview(reviewID, "ESCREVER ARQUIVO", p.Path) {
+						err := h.Executor.Proxy.WriteFile(p.Path, p.Content)
+						if err == nil {
+							result = map[string]bool{"success": true}
+						} else {
+							rpcErr = &RPCError{Code: -32001, Message: err.Error()}
+						}
+					} else {
+						rpcErr = &RPCError{Code: 403, Message: "Escrita recusada pelo usuário."}
+					}
+				} else {
+					// Escrita direta para arquivos não-críticos (.txt, .md, etc)
+					err := h.Executor.Proxy.WriteFile(p.Path, p.Content)
+					if err == nil {
+						result = map[string]bool{"success": true}
+					} else {
+						rpcErr = &RPCError{Code: -32001, Message: err.Error()}
+					}
+				}
 			} else {
-				rpcErr = &RPCError{Code: -32001, Message: err.Error()}
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ ESCRITA BLOQUEADA: Ative 'Permitir Escrita' nas configurações."}
 			}
 		}
 
@@ -562,15 +589,20 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Path string `json:"path"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			if h.Executor.RequestReview(reviewID, "DELETAR ARQUIVO", p.Path) {
-				err := h.Executor.Proxy.DeleteFile(p.Path)
-				if err == nil {
-					result = map[string]bool{"success": true}
+			cfg, _ := config.Load()
+			if cfg.Security.AllowDelete {
+				if h.Executor.RequestReview(reviewID, "DELETAR ARQUIVO", p.Path) {
+					err := h.Executor.Proxy.DeleteFile(p.Path)
+					if err == nil {
+						result = map[string]bool{"success": true}
+					} else {
+						rpcErr = &RPCError{Code: -32002, Message: err.Error()}
+					}
 				} else {
-					rpcErr = &RPCError{Code: -32002, Message: err.Error()}
+					rpcErr = &RPCError{Code: 403, Message: "Ação rejeitada pelo usuário"}
 				}
 			} else {
-				rpcErr = &RPCError{Code: 403, Message: "Ação rejeitada pelo usuário"}
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ DELEÇÃO BLOQUEADA: Permissão insuficiente."}
 			}
 		}
 
@@ -580,16 +612,21 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			NewPath string `json:"newPath"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			details := fmt.Sprintf("%s -> %s", p.OldPath, p.NewPath)
-			if h.Executor.RequestReview(reviewID, "MOVER/RENOMEAR", details) {
-				err := h.Executor.Proxy.MoveFile(p.OldPath, p.NewPath)
-				if err == nil {
-					result = map[string]bool{"success": true}
+			cfg, _ := config.Load()
+			if cfg.Security.AllowMove {
+				details := fmt.Sprintf("%s -> %s", p.OldPath, p.NewPath)
+				if h.Executor.RequestReview(reviewID, "MOVER/RENOMEAR", details) {
+					err := h.Executor.Proxy.MoveFile(p.OldPath, p.NewPath)
+					if err == nil {
+						result = map[string]bool{"success": true}
+					} else {
+						rpcErr = &RPCError{Code: -32003, Message: err.Error()}
+					}
 				} else {
-					rpcErr = &RPCError{Code: -32003, Message: err.Error()}
+					rpcErr = &RPCError{Code: 403, Message: "Ação rejeitada pelo usuário"}
 				}
 			} else {
-				rpcErr = &RPCError{Code: 403, Message: "Ação rejeitada pelo usuário"}
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ MOVIMENTAÇÃO BLOQUEADA."}
 			}
 		}
 
@@ -599,16 +636,22 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			Args    []string `json:"args"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			details := fmt.Sprintf("%s %s", p.Command, strings.Join(p.Args, " "))
-			if h.Executor.RequestReview(reviewID, "EXECUTAR COMANDO", details) {
-				output, err := h.Executor.Proxy.RunCommand(p.Command, p.Args)
-				if err == nil {
-					result = map[string]string{"output": output}
+			cfg, _ := config.Load()
+			if cfg.Security.AllowRunCommands {
+				details := fmt.Sprintf("%s %s", p.Command, strings.Join(p.Args, " "))
+				// Comandos sempre pedem review por segurança extrema, a menos que mude no futuro
+				if h.Executor.RequestReview(reviewID, "EXECUTAR COMANDO", details) {
+					output, err := h.Executor.Proxy.RunCommand(p.Command, p.Args)
+					if err == nil {
+						result = map[string]string{"output": output}
+					} else {
+						rpcErr = &RPCError{Code: -32004, Message: err.Error()}
+					}
 				} else {
-					rpcErr = &RPCError{Code: -32004, Message: err.Error()}
+					rpcErr = &RPCError{Code: 403, Message: "Execução rejeitada pelo usuário"}
 				}
 			} else {
-				rpcErr = &RPCError{Code: 403, Message: "Execução rejeitada pelo usuário"}
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ EXECUÇÃO BLOQUEADA: Ative 'Executar Comandos'."}
 			}
 		}
 
@@ -642,10 +685,11 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 		} else {
 			rpcErr = &RPCError{
 				Code:    -32601,
-				Message: "Método não implementado ou bloqueado por política de segurança",
+				Message: "🛡️ AÇÃO BLOQUEADA: Método não reconhecido ou gesso de segurança ativo.",
 			}
 		}
 	}
+
 
 	err := h.Executor.SendRPC(h.Session, JSONRPCMessage{
 		JSONRPC: JSONRPCVersion,
@@ -724,7 +768,7 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 }
 
 // SendInput envia texto para uma sessão ativa da IA via RPC 'prompt'.
-func (e *ACPExecutor) SendInput(sessionID string, input string) error {
+func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[string]string) error {
 	e.Mu.Lock()
 	session, ok := e.ActiveSessions[sessionID]
 	e.Mu.Unlock()
@@ -737,9 +781,25 @@ func (e *ACPExecutor) SendInput(sessionID string, input string) error {
 		return fmt.Errorf("sessão não initializada completamente (sem ACP sessionId)")
 	}
 
-	// Dispara o prompt no formato ACP oficial ([{type: "text", text: "..."}])
-	promptData := []map[string]string{
-		{"type": "text", "text": input},
+	// 🧠 Construção do Prompt Multimodal (Texto + Imagens)
+	var promptData []interface{}
+	
+	// Adiciona a parte de texto
+	promptData = append(promptData, map[string]string{
+		"type": "text",
+		"text": input,
+	})
+
+	// Adiciona as partes de imagem (se houver)
+	for _, img := range images {
+		promptData = append(promptData, map[string]interface{}{
+			"type": "image",
+			"source": map[string]string{
+				"type":      "base64",
+				"mediaType": img["type"],
+				"data":      img["data"],
+			},
+		})
 	}
 
 	params, _ := json.Marshal(map[string]interface{}{

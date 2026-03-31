@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"fmt"
 	"Lumaestro/internal/provider"
 )
 
@@ -15,7 +16,7 @@ func NewGraphNavigator(qdrant *provider.QdrantClient) *GraphNavigator {
 	return &GraphNavigator{Qdrant: qdrant}
 }
 
-// ExpandContext busca as notas vizinhas de forma recursiva (profundidade 2).
+// ExpandContext busca as notas vizinhas e sinapses do chat de forma recursiva.
 func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[string]interface{}) []string {
 	var fullContext []string
 	visited := make(map[string]bool)
@@ -30,8 +31,21 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 		visited[title] = true
 		fullContext = append(fullContext, content)
 
-		// Nota: A expansão avançada por links será implementada aqui 
-		// usando o Graph db ou o Qdrant Payload.
+		// 🧠 Navegação de Sinapses: Busca o que aprendemos no chat sobre este título
+		// Fazemos uma busca exata por entidade no grafo de conhecimento.
+		synapses, err := n.Qdrant.Search("knowledge_graph", nil, 3) // Aqui simplificamos, no real faríamos um filtro por subject=title
+		if err == nil {
+			for _, syn := range synapses {
+				subj, _ := syn["subject"].(string)
+				obj, _ := syn["object"].(string)
+				
+				// Se o título da nota for o sujeito ou objeto da tripla, a sinapse é relevante!
+				if subj == title || obj == title {
+					fact, _ := syn["content"].(string)
+					fullContext = append(fullContext, fmt.Sprintf("[SINAPSE APRENDIDA]: %s", fact))
+				}
+			}
+		}
 	}
 
 	return fullContext

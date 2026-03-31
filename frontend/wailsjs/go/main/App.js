@@ -14,6 +14,10 @@ export function CheckConnection() {
   return window['go']['main']['App']['CheckConnection']();
 }
 
+export function ConsolidateChatKnowledge(arg1) {
+  return window['go']['main']['App']['ConsolidateChatKnowledge'](arg1);
+}
+
 export function FixEnvironment() {
   return window['go']['main']['App']['FixEnvironment']();
 }
@@ -62,8 +66,8 @@ export function ScanVault() {
   return window['go']['main']['App']['ScanVault']();
 }
 
-export function SendAgentInput(arg1, arg2) {
-  return window['go']['main']['App']['SendAgentInput'](arg1, arg2);
+export function SendAgentInput(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SendAgentInput'](arg1, arg2, arg3);
 }
 
 export function SendTerminalData(arg1, arg2) {
