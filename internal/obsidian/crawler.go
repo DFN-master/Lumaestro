@@ -57,9 +57,8 @@ func (c *Crawler) saveCache() {
 
 // IndexVault percorre e indexa notas independentemente de terem Cache (Forçar Reboot Visual e DB).
 func (c *Crawler) IndexVault(ctx context.Context) error {
-	c.mu.Lock()
-	c.cache = make(map[string]int64) // 💥 DESTROI CACHE EM MEMÓRIA A CADA SCAN
-	c.mu.Unlock()
+	// O cache é preservado para evitar re-indexação inútil.
+
 
 	var totalSkipped int = 0
 	var totalIndexed int = 0
@@ -69,13 +68,23 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			return nil
 		}
 
-		// Checa se o arquivo mudou antes de chamar a API
 		c.mu.Lock()
 		lastMod, exists := c.cache[path]
 		c.mu.Unlock()
 
+		nodeName := strings.TrimSuffix(info.Name(), ".md")
 		if exists && lastMod == info.ModTime().Unix() {
 			totalSkipped++
+			
+			// ✅ RESTAURAÇÃO VISUAL: Mesmo em cache, precisamos avisar a UI sobre a existência do nó e suas conexões
+			runtime.EventsEmit(ctx, "graph:node", map[string]string{"id": nodeName, "name": nodeName})
+			content, err := os.ReadFile(path)
+			if err == nil {
+				links := extractLinks(string(content))
+				for _, link := range links {
+					runtime.EventsEmit(ctx, "graph:edge", map[string]string{"source": nodeName, "target": link})
+				}
+			}
 			return nil // JÁ INDEXADO E INTEGRAL
 		}
 
@@ -97,7 +106,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 		links := extractLinks(string(content))
 
 		// 3. Salvar no Qdrant
-		nodeName := strings.TrimSuffix(info.Name(), ".md")
+		nodeName = strings.TrimSuffix(info.Name(), ".md")
 		c.Qdrant.UpsertPoint("obsidian_knowledge", uint64(time.Now().UnixNano()), vector, map[string]interface{}{
 			"path": path, "name": nodeName, "content": string(content), "triples": triples, "links": links,
 		})

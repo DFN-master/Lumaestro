@@ -64,6 +64,7 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 		
 		// Evento Visual: Acende o nó brilhantemente ao iniciar sua leitura formal
 		runtime.EventsEmit(ctx, "node:active", title)
+		time.Sleep(300 * time.Millisecond) // DELAY CINEMÁTICO UX 🎬
 
 		content, _ := current.data["content"].(string)
 

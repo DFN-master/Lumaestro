@@ -22,7 +22,8 @@ const state = reactive({
   logs: [],
   nodes: [],
   edges: [],
-  graphLogs: []
+  graphLogs: [],
+  activeNode: null
 })
 
 // ── Resize Handle Logic ──
@@ -83,7 +84,15 @@ onMounted(async () => {
   })
 
   EventsOn('graph:edge', (edge) => {
-    state.edges.push(edge)
+    const s = edge.source.id || edge.source
+    const t = edge.target.id || edge.target
+    if (!state.edges.find(e => {
+      const es = e.source.id || e.source
+      const et = e.target.id || e.target
+      return (es === s && et === t) || (es === t && et === s) // Evita duplicatas bidirecionais se redundante
+    })) {
+      state.edges.push(edge)
+    }
   })
 
   EventsOn('graph:log', (glog) => {
@@ -91,6 +100,11 @@ onMounted(async () => {
     if(state.graphLogs.length > 20) {
       state.graphLogs.shift() // Mantém o console UI leve (apenas os 20 últimos pensamentos)
     }
+  })
+
+  // Escuta saltos entre notas nas pesquisas
+  EventsOn('node:active', (nodeId) => {
+    state.activeNode = nodeId
   })
 })
 </script>
@@ -114,7 +128,7 @@ onMounted(async () => {
     <main id="lumaestro-main" :class="{ 'is-orchestrator': currentView === 'orchestrator' }">
       <template v-if="currentView === 'orchestrator'">
         <div class="graph-area">
-          <GraphVisualizer :nodes="state.nodes" :edges="state.edges" :graphLogs="state.graphLogs" />
+          <GraphVisualizer :nodes="state.nodes" :edges="state.edges" :graphLogs="state.graphLogs" :activeNode="state.activeNode" />
         </div>
 
         <!-- Resize Handle (arrastável) -->

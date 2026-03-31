@@ -1,18 +1,19 @@
 <script setup>
-import { onMounted, ref, watch, nextTick } from 'vue'
 import * as d3 from 'd3'
-import { EventsOn } from '../../wailsjs/runtime/runtime'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { ScanVault } from '../../wailsjs/go/main/App'
 
 const props = defineProps({
   nodes: { type: Array, default: () => [] },
   edges: { type: Array, default: () => [] },
-  graphLogs: { type: Array, default: () => [] } // Injetando os "Pensamentos da IA"
+  graphLogs: { type: Array, default: () => [] },
+  activeNode: { type: String, default: null } // O Roteador de Luz (Nó atual pensando na AI)
 })
 
 const svgRef = ref(null)
 const containerRef = ref(null)
 const logContainerRef = ref(null)
+const getSafeId = (id) => `node-${id.replace(/[^a-zA-Z0-9_-]/g, '_')}`
 
 let simulation = null
 let svg = null
@@ -83,7 +84,6 @@ const updateGraph = () => {
       const cw = containerRef.value?.clientWidth || 500
       const ch = containerRef.value?.clientHeight || 500
       
-      // Injeta X e Y randômicos próximos ao Eixo para a física de Colisão funcionar.
       const clone = { 
          ...n, 
          x: cw / 2 + (Math.random() - 0.5) * 50,
@@ -94,7 +94,25 @@ const updateGraph = () => {
     }
   })
 
-  // Higieniza as arestas (Recria a cada tick) apenas p/ bolinhas válidas e já visíveis
+  // 1.5 Criação de Nós Virtuais (Para links que ainda não existem como arquivos)
+  props.edges.forEach(e => {
+    const t = e.target.id || e.target
+    if (!localNodesMap.has(t)) {
+      const cw = containerRef.value?.clientWidth || 500
+      const ch = containerRef.value?.clientHeight || 500
+      const virtualNode = { 
+        id: t, 
+        name: t, 
+        virtual: true,
+        x: cw / 2 + (Math.random() - 0.5) * 50,
+        y: ch / 2 + (Math.random() - 0.5) * 50
+      }
+      localNodesMap.set(t, virtualNode)
+      localNodesList.push(virtualNode)
+    }
+  })
+
+  // Higieniza as arestas (Recria a cada tick)
   localEdgesList.length = 0
   localEdgesMap.clear()
 
@@ -103,7 +121,6 @@ const updateGraph = () => {
     const t = e.target.id || e.target
     const key = `${s}-${t}`
     
-    // BLOQUEIO DE CRASH D3: Cordas apontadas no vazio quebram a gravação
     if (localNodesMap.has(s) && localNodesMap.has(t)) {
         if (!localEdgesMap.has(key)) {
           const clone = { ...e, source: s, target: t }
@@ -134,17 +151,20 @@ const updateGraph = () => {
   // Círculos LUMINOSOS
   nodesEnter.append("circle")
     .attr("r", 0) 
-    .attr("fill", "var(--primary)")
-    .attr("filter", "url(#glow)")
+    .attr("fill", d => d.virtual ? "rgba(59, 130, 246, 0.2)" : "var(--primary)")
+    .attr("stroke", d => d.virtual ? "rgba(59, 130, 246, 0.5)" : "none")
+    .attr("stroke-dasharray", d => d.virtual ? "2,2" : "none")
+    .attr("filter", d => d.virtual ? "none" : "url(#glow)")
     .attr("class", "node-circle")
-    .attr("id", d => `node-${d.id.replace(/[^a-zA-Z0-9_-]/g, '')}`)
-    .transition().duration(500).attr("r", 6)
+    .attr("id", d => getSafeId(d.id))
+    .transition().duration(500).attr("r", d => d.virtual ? 4 : 6)
 
   // Nomes 
   nodesEnter.append("text")
     .text(d => d.name || d.id)
     .attr("x", 12).attr("y", 4)
     .attr("class", "node-label")
+    .style("opacity", d => d.virtual ? 0.3 : 1)
 
   nodes.exit().remove()
   const allNodes = nodesEnter.merge(nodes)
@@ -152,7 +172,7 @@ const updateGraph = () => {
   // 4. REINICIAR GRAVIDADES DESACOLHADAS DE VUE
   simulation.nodes(localNodesList)
   simulation.force("link").links(localEdgesList)
-  simulation.alpha(0.3).restart()
+  simulation.alpha(1).restart() // Aumentado para 1 para dar mais "vida" ao movimento
 
   simulation.on("tick", () => {
     allLinks.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
@@ -164,6 +184,62 @@ const updateGraph = () => {
   function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
   function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }
 }
+
+// ==========================================
+// 🌟 EFEITO RAG TRACKER (PULO DA SINAPSE) 🌟
+// ==========================================
+watch(() => props.activeNode, (newId) => {
+  if (!nodeGroup) return
+  
+  // Apaga as notas anteriores (Reseta p/ Azul Padrão)
+  nodeGroup.selectAll("circle")
+    .transition().duration(200)
+    .attr("fill", "var(--primary)").attr("r", 6).style("filter", "url(#glow)")
+
+  if (newId) {
+    // ⚡ ALPHA BOOST: Pulso de energia física na simulação ao ativar nota (Feel TrustGraph)
+    if (simulation) simulation.alpha(0.8).restart()
+
+    // ⚡ PULSO DE ENERGIA (Sinapses): Brilho nos caminhos conectados
+    if (linkGroup) {
+      linkGroup.selectAll(".edge-flow")
+        .classed("edge-active", d => {
+          const sourceId = d.source.id || d.source
+          const targetId = d.target.id || d.target
+          return sourceId === newId || targetId === newId
+        })
+      
+      // Remove o pulso após um tempo (raciocínio passou)
+      setTimeout(() => {
+        if (linkGroup) {
+          linkGroup.selectAll(".edge-active").classed("edge-active", false)
+        }
+      }, 3000)
+    }
+
+    // Acende a Bola Lida pela IA (Amarelo Ouro + Gigante + Pulsação)
+    const safeId = getSafeId(newId)
+    // Seletor mais robusto usando atributo ID exato (evita falhas com caracteres especiais do CSS)
+    const target = nodeGroup.select(`[id="${safeId}"]`)
+    
+    target.transition().duration(400)
+      .attr("fill", "#fcd34d")
+      .attr("r", 15)
+      .style("filter", "drop-shadow(0 0 15px #fcd34d)")
+      .on("end", function() {
+          d3.select(this).classed("pulse-ring", true)
+      })
+
+    // Decaimento natural após o "pensamento" passar (opcional, mas charmoso)
+    target.transition().delay(5000).duration(2000)
+      .attr("fill", "var(--primary)")
+      .attr("r", 6)
+      .style("filter", "url(#glow)")
+      .on("start", function() {
+          d3.select(this).classed("pulse-ring", false)
+      })
+  }
+})
 
 // Reatividade
 watch(() => [props.nodes, props.edges], () => {
@@ -182,20 +258,6 @@ watch(() => props.graphLogs, () => {
 onMounted(() => {
   mountGraphEnvironment()
   updateGraph()
-
-  // Node Active / Highlight! Animamos dinamicamente (Energia e Foco)
-  EventsOn('node:active', (nodeId) => {
-    const cleanId = nodeId.replace(/[^a-zA-Z0-9_-]/g, '')
-    d3.select(`#node-${cleanId}`)
-      .transition().duration(300)
-      .attr('r', 18)
-      .attr('fill', '#ffd700') // Amarelo Vivo Raciocínio
-      .attr('filter', 'url(#glow-active)')
-      .transition().duration(2500) // Decaimento Natural
-      .attr('r', 6)
-      .attr('fill', 'var(--primary)')
-      .attr('filter', 'url(#glow)')
-  })
 })
 
 const resetZoom = () => svg.transition().duration(750).call(d3.zoom().transform, d3.zoomIdentity)
@@ -418,6 +480,17 @@ const triggerScan = async () => {
   to { stroke-dashoffset: -20; }
 }
 
+/* ⚡ Pulso de Sinapse (Energia nos Caminhos) */
+.edge-active {
+  stroke: #fcd34d !important;
+  stroke-width: 3 !important;
+  stroke-opacity: 1 !important;
+  stroke-dasharray: 8 4 !important;
+  animation: dashFlow 0.5s linear infinite !important;
+  filter: drop-shadow(0 0 5px #fcd34d);
+  transition: stroke 0.3s, stroke-width 0.3s;
+}
+
 /* ⚙️ Console Visual Lateral */
 .graph-logs-console {
   margin-top: 15px;
@@ -442,5 +515,16 @@ const triggerScan = async () => {
   padding-left: 6px;
   line-height: 1.4;
   word-break: break-all;
+}
+
+/* 🌀 Pulsação de Nó Ativo */
+.pulse-ring {
+  animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
 }
 </style>

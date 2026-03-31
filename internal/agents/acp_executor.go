@@ -376,17 +376,15 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	// 🔑 Estágio 4: Auto-Approve - Libera as mãos do Maestro
 	// Envia setSessionMode para que o Gemini CLI execute ferramentas sem pedir permissão
-	fmt.Println("[ACP] Enviando setSessionMode (auto-approve)...")
+	fmt.Println("[ACP] Enviando session/set_mode (auto-approve)...")
 	modeParams, _ := json.Marshal(map[string]interface{}{
 		"sessionId": session.ACPSessID,
-		"mode": map[string]interface{}{
-			"toolConfirmation": "none",
-		},
+		"modeId":    "yolo",
 	})
 	e.SendRPC(session, JSONRPCMessage{
 		JSONRPC: JSONRPCVersion,
 		ID:      e.getNextID(),
-		Method:  "setSessionMode",
+		Method:  "session/set_mode",
 		Params:  modeParams,
 	})
 	fmt.Println("[ACP] Auto-approve configurado. Mãos livres!")
