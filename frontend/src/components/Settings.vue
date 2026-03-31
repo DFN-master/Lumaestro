@@ -11,7 +11,17 @@ const config = ref({
   claude_api_key: '',
   use_claude_api_key: false,
   active_agent: 'gemini',
-  auto_start_agents: []
+  auto_start_agents: [],
+  agent_language: 'Português do Brasil',
+  security: {
+    allow_read: false,
+    allow_write: false,
+    allow_create: false,
+    allow_delete: false,
+    allow_move: false,
+    allow_run_commands: false,
+    full_machine_access: false
+  }
 })
 
 // Helpers para auto-start toggles
@@ -173,6 +183,8 @@ const listMCPServers = async () => {
     showMcpList.value = true
   }
 }
+
+const activeTab = ref('geral')
 </script>
 
 <template>
@@ -183,11 +195,34 @@ const listMCPServers = async () => {
       <p class="subtitle">Gerencie o cérebro e as ferramentas da sua IA.</p>
     </header>
 
-    <div class="content-grid">
-      <!-- Seção Geral -->
-      <section class="glass premium-shadow panel-main">
+    <div class="tabs-nav">
+      <button @click="activeTab = 'geral'" :class="{ 'active': activeTab === 'geral' }" class="tab-btn">GERAL</button>
+      <button @click="activeTab = 'agentes'" :class="{ 'active': activeTab === 'agentes' }" class="tab-btn">AGENTES</button>
+      <button @click="activeTab = 'seguranca'" :class="{ 'active': activeTab === 'seguranca' }" class="tab-btn">SEGURANÇA</button>
+      <button @click="activeTab = 'mcp'" :class="{ 'active': activeTab === 'mcp' }" class="tab-btn">AVANÇADO (MCP)</button>
+    </div>
+
+    <div class="content-grid-tabs">
+      <!-- ABA GERAL -->
+      <section v-if="activeTab === 'geral'" class="glass premium-shadow panel-main animate-fade-in">
         <h2 class="section-title">Configurações Base</h2>
         
+        <div class="form-group">
+          <label>Idioma Nativo do Agente</label>
+          <div class="input-wrapper">
+            <select v-model="config.agent_language" class="premium-input premium-select">
+              <option value="Português do Brasil">Português (Brasil)</option>
+              <option value="English">English</option>
+              <option value="Español">Español</option>
+              <option value="Français">Français</option>
+              <option value="Deutsch">Deutsch</option>
+              <option value="Italiano">Italiano</option>
+              <option value="日本語 (Japanese)">日本語 (Japonês)</option>
+            </select>
+            <div class="input-glow"></div>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>Caminho do Obsidian Vault</label>
           <div class="input-wrapper">
@@ -204,155 +239,160 @@ const listMCPServers = async () => {
           </div>
         </div>
 
-        <div class="form-group">
-          <label>Google Gemini API Key (Embeddings & CLI)</label>
-          <div class="input-wrapper">
-            <input v-model="config.gemini_api_key" type="password" class="premium-input" placeholder="••••••••••••••••" />
-            <div class="input-glow"></div>
-          </div>
-        </div>
-
-        <div class="form-group toggle-group" style="margin-bottom: 2.5rem;">
-          <label class="toggle-label">
-            <input type="checkbox" v-model="config.use_gemini_api_key" class="premium-toggle" />
-            <span class="toggle-slider"></span>
-            <div class="toggle-text">
-              <span class="title">Modo Autônomo API (Gemini CLI)</span>
-              <span class="desc">Usar chave em vez da sessão OAuth. (Embeddings usam a chave obrigatoriamente)</span>
-            </div>
-          </label>
-        </div>
-
-        <div class="form-group">
-          <label>Anthropic Claude API Key</label>
-          <div class="input-wrapper">
-            <input v-model="config.claude_api_key" type="password" class="premium-input" placeholder="••••••••••••••••" :disabled="!config.use_claude_api_key" />
-            <div class="input-glow"></div>
-          </div>
-        </div>
-
-        <div class="form-group toggle-group">
-          <label class="toggle-label">
-            <input type="checkbox" v-model="config.use_claude_api_key" class="premium-toggle" />
-            <span class="toggle-slider"></span>
-            <div class="toggle-text">
-              <span class="title">Modo Autônomo API</span>
-              <span class="desc">Usar chave em vez da assinatura Pro (claude auth login)</span>
-            </div>
-          </label>
-        </div>
-
-
-        <div style="display: flex; gap: 15px; margin-top: 1rem;">
+        <div style="display: flex; gap: 15px; margin-top: 2rem;">
           <button @click="save" class="btn-premium save-btn">
             <span>SALVAR ALTERAÇÕES</span>
             <div class="btn-shimmer"></div>
           </button>
-
-          <button @click="generateGeminiMD" class="tool-btn" style="flex: 1; border-color: rgba(59, 130, 246, 0.5); color: #93c5fd;">
-            GERAR GEMINI.MD (REGRAS)
-          </button>
         </div>
       </section>
 
-      <!-- Hub de Ferramentas -->
-      <section class="tools-container">
-        <h2 class="section-title">Hub de Agentes</h2>
-        <div class="tools-grid">
-          <!-- Card Gemini -->
-          <div class="tool-card glass glow-on-hover" :class="{ 'active': status.tools.gemini }">
-            <div class="card-header">
-              <div class="status-indicator" :class="{ 'online': status.tools.gemini }"></div>
-              <h3>Gemini CLI</h3>
-            </div>
-            <p>IA generativa rápida e eficiente.</p>
-            <div v-if="status.tools.gemini" class="autostart-toggle" @click="toggleAutoStart('gemini')">
-              <div class="autostart-dot" :class="{ 'on': isAutoStart('gemini') }"></div>
-              <span>{{ isAutoStart('gemini') ? 'Inicia com o App ✓' : 'Iniciar com o App' }}</span>
-            </div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              <button @click="install('gemini')" class="tool-btn">
-                {{ status.tools.gemini ? 'ATUALIZAR' : 'INSTALAR' }}
-              </button>
-              <button v-if="status.tools.gemini" @click="setup('gemini')" class="tool-btn" :style="getAuthStyle('gemini')">
-                {{ getAuthLabel('gemini') }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Card Claude -->
-          <div class="tool-card glass glow-on-hover" :class="{ 'active': status.tools.claude }">
-            <div class="card-header">
-              <div class="status-indicator" :class="{ 'online': status.tools.claude }"></div>
-              <h3>Claude Code</h3>
-            </div>
-            <p>Codificação autônoma de elite.</p>
-            <div v-if="status.tools.claude" class="autostart-toggle" @click="toggleAutoStart('claude')">
-              <div class="autostart-dot" :class="{ 'on': isAutoStart('claude') }"></div>
-              <span>{{ isAutoStart('claude') ? 'Inicia com o App ✓' : 'Iniciar com o App' }}</span>
-            </div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              <button @click="install('claude')" class="tool-btn">
-                {{ status.tools.claude ? 'ATUALIZAR' : 'INSTALAR' }}
-              </button>
-              <button v-if="status.tools.claude" @click="setup('claude')" class="tool-btn" :style="getAuthStyle('claude')">
-                {{ getAuthLabel('claude') }}
-              </button>
-              <button v-if="!status.tools.claude" @click="fixEnv" class="tool-btn" style="border-color: var(--primary-glow); color: var(--primary);">
-                CORRIGIR PATH
-              </button>
-            </div>
-          </div>
-
-          <!-- Card Obsidian -->
-          <div class="tool-card glass glow-on-hover" :class="{ 'active': status.tools.obsidian }">
-            <div class="card-header">
-              <div class="status-indicator" :class="{ 'online': status.tools.obsidian }"></div>
-              <h3>Obsidian CLI</h3>
-            </div>
-            <p>Sincronização de base de conhecimento.</p>
-            <button @click="install('obsidian')" class="tool-btn">
-              {{ status.tools.obsidian ? 'ATUALIZAR' : 'INSTALAR' }}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Servidores MCP -->
-      <section class="tools-container" style="grid-column: 1 / -1; margin-top: 1rem;">
-        <h2 class="section-title">Integração MCP (Model Context Protocol)</h2>
-        <div class="glass premium-shadow panel-main" style="display: flex; flex-direction: column; gap: 1.5rem;">
+      <!-- ABA AGENTES -->
+      <div v-if="activeTab === 'agentes'" class="agents-layout animate-fade-in">
+        <section class="glass premium-shadow panel-main">
+          <h2 class="section-title">Autenticação e Chaves</h2>
           
-          <div style="display: flex; gap: 1.5rem; align-items: flex-end;">
-            <div class="form-group" style="margin-bottom: 0; flex: 1;">
-              <label>Nome do Servidor (ex: github)</label>
-              <div class="input-wrapper">
-                <input v-model="mcpName" type="text" class="premium-input" placeholder="github" />
-                <div class="input-glow"></div>
-              </div>
+          <div class="form-group">
+            <label>Google Gemini API Key</label>
+            <div class="input-wrapper">
+              <input v-model="config.gemini_api_key" type="password" class="premium-input" placeholder="••••••••••••••••" />
+              <div class="input-glow"></div>
             </div>
-
-            <div class="form-group" style="margin-bottom: 0; flex: 2;">
-              <label>Comando de Execução (ex: npx -y @modelcontextprotocol/server-github)</label>
-              <div class="input-wrapper">
-                <input v-model="mcpCommand" type="text" class="premium-input" placeholder="npx -y @modelcontextprotocol/server-github" />
-                <div class="input-glow"></div>
-              </div>
-            </div>
-
-            <button @click="addMCPServer" class="tool-btn" style="height: 48px; border-color: var(--success); color: var(--success);">
-              ADICIONAR MCP
-            </button>
           </div>
 
-          <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1.5rem;">
-            <button @click="listMCPServers" class="tool-btn" style="margin-bottom: 1rem;">
-              LISTAR SERVIDORES INSTALADOS
-            </button>
+          <div class="form-group toggle-group" style="margin-bottom: 2rem;">
+            <label class="toggle-label">
+              <input type="checkbox" v-model="config.use_gemini_api_key" class="premium-toggle" />
+              <span class="toggle-slider"></span>
+              <div class="toggle-text">
+                <span class="title">Modo Autônomo API</span>
+                <span class="desc">Usar chave em vez da sessão OAuth.</span>
+              </div>
+            </label>
+          </div>
 
-            <div v-if="showMcpList" class="console-body" style="height: auto; max-height: 200px; padding: 1rem;">
-              <pre style="margin: 0; white-space: pre-wrap; color: #a1a1aa;">{{ mcpServers }}</pre>
+          <div class="form-group">
+            <label>Anthropic Claude API Key</label>
+            <div class="input-wrapper">
+              <input v-model="config.claude_api_key" type="password" class="premium-input" placeholder="••••••••••••••••" :disabled="!config.use_claude_api_key" />
+              <div class="input-glow"></div>
             </div>
+          </div>
+
+          <div class="form-group toggle-group">
+            <label class="toggle-label">
+              <input type="checkbox" v-model="config.use_claude_api_key" class="premium-toggle" />
+              <span class="toggle-slider"></span>
+              <div class="toggle-text">
+                <span class="title">Modo Autônomo API</span>
+                <span class="desc">Chave API em vez de Login OAuth.</span>
+              </div>
+            </label>
+          </div>
+
+          <button @click="save" class="btn-premium save-btn" style="margin-top: 1rem;">
+            <span>SALVAR CHAVES</span>
+            <div class="btn-shimmer"></div>
+          </button>
+        </section>
+
+        <section class="tools-container">
+          <h2 class="section-title">Hub de Orquestração</h2>
+          <div class="tools-grid">
+            <div class="tool-card glass glow-on-hover" :class="{ 'active': status.tools.gemini }">
+              <div class="card-header">
+                <div class="status-indicator" :class="{ 'online': status.tools.gemini }"></div>
+                <h3>Gemini CLI</h3>
+              </div>
+              <p>IA generativa em tempo real.</p>
+              <div v-if="status.tools.gemini" class="autostart-toggle" @click="toggleAutoStart('gemini')">
+                <div class="autostart-dot" :class="{ 'on': isAutoStart('gemini') }"></div>
+                <span>AUTO-START</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button @click="install('gemini')" class="tool-btn">SYNC</button>
+                <button v-if="status.tools.gemini" @click="setup('gemini')" class="tool-btn" :style="getAuthStyle('gemini')">AUTH</button>
+              </div>
+            </div>
+
+            <div class="tool-card glass glow-on-hover" :class="{ 'active': status.tools.claude }">
+              <div class="card-header">
+                <div class="status-indicator" :class="{ 'online': status.tools.claude }"></div>
+                <h3>Claude Code</h3>
+              </div>
+              <p>Engine de codificação.</p>
+              <div v-if="status.tools.claude" class="autostart-toggle" @click="toggleAutoStart('claude')">
+                <div class="autostart-dot" :class="{ 'on': isAutoStart('claude') }"></div>
+                <span>AUTO-START</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button @click="install('claude')" class="tool-btn">SYNC</button>
+                <button v-if="status.tools.claude" @click="setup('claude')" class="tool-btn" :style="getAuthStyle('claude')">AUTH</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ABA SEGURANÇA -->
+      <section v-if="activeTab === 'seguranca'" class="glass premium-shadow panel-main animate-fade-in" style="border-color: rgba(239, 68, 68, 0.2);">
+        <h2 class="section-title" style="color: #ef4444;">🛡️ Segurança da Sinfonia</h2>
+        <p class="subtitle" style="font-size: 0.85rem; margin-bottom: 2rem;">Controle as permissões de acesso dos agentes ao seu sistema.</p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+          <div class="form-group toggle-group" v-for="(val, key) in {
+            allow_read: 'Permitir Leitura',
+            allow_write: 'Permitir Escrita',
+            allow_run_commands: 'Executar Comandos',
+            full_machine_access: 'Acesso Global'
+          }" :key="key">
+            <label class="toggle-label" :style="key === 'full_machine_access' ? 'border-color: #7f1d1d' : ''">
+              <input type="checkbox" v-model="config.security[key]" class="premium-toggle" />
+              <span class="toggle-slider"></span>
+              <div class="toggle-text">
+                <span class="title">{{ val }}</span>
+                <span class="desc">Ativar/Desativar privilégio de {{ val.toLowerCase() }}.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <button @click="save" class="btn-premium save-btn" style="background: linear-gradient(135deg, #450a0a 0%, #1e1b4b 100%); border-color: #ef4444; margin-top: 2rem;">
+          <span>CONFIRMAR PERMISSÕES</span>
+          <div class="btn-shimmer"></div>
+        </button>
+      </section>
+
+      <!-- ABA MCP -->
+      <section v-if="activeTab === 'mcp'" class="glass premium-shadow panel-main animate-fade-in">
+        <h2 class="section-title">Controle MCP</h2>
+        <p class="subtitle" style="font-size: 0.85rem; margin-bottom: 2rem;">Adicione novas extensões de contexto via Model Context Protocol.</p>
+
+        <div style="display: flex; flex-direction: column; gap: 2rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Nome do Servidor</label>
+              <div class="input-wrapper">
+                <input v-model="mcpName" type="text" class="premium-input" placeholder="ex: github" />
+                <div class="input-glow"></div>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label>Comando NPX / Bin</label>
+              <div class="input-wrapper">
+                <input v-model="mcpCommand" type="text" class="premium-input" placeholder="npx -y ..." />
+                <div class="input-glow"></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            <button @click="addMCPServer" class="tool-btn" style="flex: 1; border-color: var(--success); color: var(--success);">ADICIONAR SERVIDOR</button>
+            <button @click="listMCPServers" class="tool-btn" style="flex: 1;">LISTAR INSTALADOS</button>
+          </div>
+
+          <div v-if="showMcpList" class="console-body" style="height: auto; max-height: 250px; padding: 1rem; background: rgba(0,0,0,0.4);">
+            <pre style="margin: 0; font-family: 'Fira Code', monospace; font-size: 0.85rem; color: #a1a1aa;">{{ mcpServers }}</pre>
           </div>
         </div>
       </section>
@@ -419,6 +459,7 @@ const listMCPServers = async () => {
   font-size: 2.8rem;
   background: linear-gradient(135deg, #f8fafc 0%, #94a3b8 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin: 0;
 }
@@ -442,6 +483,45 @@ const listMCPServers = async () => {
   padding: 2.5rem;
 }
 
+.tabs-nav {
+  display: flex;
+  gap: 10px;
+  background: rgba(15, 23, 42, 0.4);
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 1rem;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.tab-btn:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.tab-btn.active {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+.content-grid-tabs {
+  width: 100%;
+}
+
 .section-title {
   font-size: 0.9rem;
   text-transform: uppercase;
@@ -451,6 +531,21 @@ const listMCPServers = async () => {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.agents-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 2rem;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .section-title::after {
@@ -503,6 +598,38 @@ label {
   opacity: 0.5;
   cursor: not-allowed;
   background: rgba(0, 0, 0, 0.2);
+}
+
+.premium-select {
+  appearance: none;
+  background-color: rgba(2, 6, 23, 0.5);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 1.25rem center;
+  background-size: 1.2em;
+  padding-right: 3rem;
+  transition: all 0.3s;
+}
+
+.premium-select:hover {
+  background-color: rgba(15, 23, 42, 0.8);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.premium-select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+}
+
+.premium-select option {
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 12px;
+  font-size: 0.95rem;
 }
 
 /* Custom Premium Toggle */

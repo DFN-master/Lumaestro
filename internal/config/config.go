@@ -27,6 +27,7 @@ type Config struct {
 	UseClaudeAPIKey   bool           `json:"use_claude_api_key"`
 	ActiveAgent       string         `json:"active_agent"`
 	AutoStartAgents   []string       `json:"auto_start_agents"`
+	AgentLanguage     string         `json:"agent_language"`
 	Security          SecurityConfig `json:"security"`
 }
 

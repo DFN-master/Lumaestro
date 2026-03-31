@@ -53,13 +53,20 @@ func (a *App) startup(ctx context.Context) {
 	go a.listenForInstallerLogs()
 	go a.listenForTerminalOutput()
 
-	// 🚀 Auto-Start: Inicia os agentes favoritos automaticamente no boot
+	// 🚀 Auto-Start: Inicia os agentes e sincroniza conhecimento no boot
 	if a.config != nil && a.config.GeminiAPIKey != "" {
 		go func() {
 			time.Sleep(2000 * time.Millisecond)
-			fmt.Println("[BOOT] Gemini API Key detectada. Restaurando última Sinfonia...")
-			// Se não passarmos nada, o StartAgentSession vai tentar carregar a última
+			fmt.Println("[BOOT] Maestro Online. Sincronizando conhecimento e restaurando agentes...")
+			
+			// 1. Inicia o Agente Padrão
 			a.StartAgentSession("gemini")
+
+			// 2. Indexação Silenciosa (RAG)
+			if a.crawler != nil && a.config.ObsidianVaultPath != "" {
+				fmt.Println("[BOOT] Iniciando Auto-Scan do Obsidian em background...")
+				a.ScanVault()
+			}
 		}()
 	}
 }
@@ -320,12 +327,47 @@ func (a *App) NewAgentSession(agent string) error {
 	return a.executor.StartSession(a.ctx, agent, sessionID, "")
 }
 
-// SendAgentInput via prompt RPC na sessão ACP.
 func (a *App) SendAgentInput(agent string, input string) error {
 	fmt.Printf("[App] SendAgentInput INVOCADO pela UI: agent=%s, input=%s\n", agent, input)
+
+	// 🚨 Idioma Dinâmico
+	lang := a.GetConfig().AgentLanguage
+	if lang == "" {
+		lang = "Português do Brasil"
+	}
+
+	// 🧠 Injetor de Memória Semântica (RAG Automático)
+	contextInfo := ""
+	if a.embedder != nil && a.qdrant != nil && a.config.ObsidianVaultPath != "" {
+		fmt.Println("[RAG] Buscando contexto relevante no Obsidian...")
+		vector, err := a.embedder.GenerateEmbedding(a.ctx, input)
+		if err == nil {
+			// Busca as top 3 notas relacionadas
+			notes, err := a.qdrant.Search("obsidian_knowledge", vector, 3)
+			if err == nil && len(notes) > 0 {
+				contextInfo = "\n\n[CONTEXTO DO SEU OBSIDIAN (MEMÓRIA SEMÂNTICA)]\n"
+				for _, note := range notes {
+					path := note["path"]
+					content := note["content"]
+					if content == nil { content = note["text"] } // Fallback de campo
+					contextInfo += fmt.Sprintf("--- Arquivo: %v ---\nConteúdo: %v\n\n", path, content)
+				}
+				fmt.Printf("[RAG] Injetadas %d notas relevantes como contexto.\n", len(notes))
+			}
+		} else {
+			fmt.Printf("[RAG] Erro ao gerar embedding para contexto: %v\n", err)
+		}
+	}
+
+	// Diretiva Técnica Dinâmica: Focada em organização e clareza visual.
+	directive := fmt.Sprintf("\n\n[SYSTEM: Interaction language is %s. Maintain all internal thoughts and reasoning in the thought channel. Final response must be strictly in %s. ORGANIZATION RULES: 1. Use clear Markdown headers (##). 2. Use horizontal rules (---) to separate major sections. 3. Keep paragraphs short (max 3 lines). 4. Use bold text for key terms.]", lang, lang)
 	
+	// A Sinfonia Final: Contexto + Input + Diretiva
+	enhancedInput := contextInfo + "\n\nMENSAGEM DO USUÁRIO:\n" + input + directive
+
+
 	sessionID := "acp-session-" + agent
-	err := a.executor.SendInput(sessionID, input)
+	err := a.executor.SendInput(sessionID, enhancedInput)
 	if err != nil {
 		fmt.Printf("[App] ERRO no SendAgentInput: %v\n", err)
 		return fmt.Errorf("erro ao enviar input para ACP: %v", err)

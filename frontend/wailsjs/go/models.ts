@@ -62,6 +62,7 @@ export namespace config {
 	    use_claude_api_key: boolean;
 	    active_agent: string;
 	    auto_start_agents: string[];
+	    agent_language: string;
 	    security: SecurityConfig;
 	
 	    static createFrom(source: any = {}) {
@@ -78,6 +79,7 @@ export namespace config {
 	        this.use_claude_api_key = source["use_claude_api_key"];
 	        this.active_agent = source["active_agent"];
 	        this.auto_start_agents = source["auto_start_agents"];
+	        this.agent_language = source["agent_language"];
 	        this.security = this.convertValues(source["security"], SecurityConfig);
 	    }
 	

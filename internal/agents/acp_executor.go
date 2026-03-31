@@ -37,6 +37,8 @@ type ACPExecutor struct {
 	// pendingRequests mapeia o ID da mensagem para um canal que receberá o resultado.
 	pendingRequests   map[int]chan JSONRPCMessage
 	requestsMu        sync.Mutex
+	
+	Tools             *ToolRegistry // 🛠️ Biblioteca de ferramentas do Obsidian
 }
 
 // SessionInfo representa metadados de uma sessão ACP (Checkpoint)
@@ -74,6 +76,7 @@ func NewACPExecutor() *ACPExecutor {
 		LogChan:        make(chan ExecutionLog, 100),
 		TerminalOutput: make(chan TerminalData, 256),
 		Proxy:          NewFSProxy(),
+		Tools:          NewToolRegistry(), // 🛠️ Inicializa as ferramentas Obsidian
 		pendingReviews: make(map[string]chan bool),
 		pendingRequests: make(map[int]chan JSONRPCMessage),
 	}
@@ -610,9 +613,37 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 		}
 
 	default:
-		rpcErr = &RPCError{
-			Code:    -32601,
-			Message: "Método não implementado ou bloqueado por política de segurança",
+		// 🛠️ Roteamento de Ferramentas Customizadas (ex: Lumaestro/ListVaultFiles)
+		if strings.HasPrefix(method, "Lumaestro/") {
+			toolName := strings.TrimPrefix(method, "Lumaestro/")
+			if tool, exists := h.Executor.Tools.Tools[toolName]; exists {
+				var args map[string]interface{}
+				// Unmarshal params (se houver)
+				if len(params) > 0 && string(params) != "null" {
+					json.Unmarshal(params, &args)
+				}
+				
+				// Injeta o caminho do Vault automaticamente para ferramentas do Obsidian
+				if args == nil { args = make(map[string]interface{}) }
+				if _, ok := args["path"]; !ok {
+					cfg, _ := config.Load()
+					args["path"] = cfg.ObsidianVaultPath
+				}
+
+				output, err := tool.Function(args)
+				if err == nil {
+					result = map[string]interface{}{"result": output}
+				} else {
+					rpcErr = &RPCError{Code: -32005, Message: err.Error()}
+				}
+			} else {
+				rpcErr = &RPCError{Code: -32601, Message: fmt.Sprintf("Ferramenta '%s' não registrada", toolName)}
+			}
+		} else {
+			rpcErr = &RPCError{
+				Code:    -32601,
+				Message: "Método não implementado ou bloqueado por política de segurança",
+			}
 		}
 	}
 

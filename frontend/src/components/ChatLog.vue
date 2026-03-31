@@ -237,14 +237,51 @@ onMounted(scrollToBottom);
 :deep(.markdown-body) {
   color: #e2e8f0;
 }
-:deep(.markdown-body p) { margin-bottom: 16px; }
-:deep(.markdown-body h1, .markdown-body h2) { margin-top: 24px; margin-bottom: 16px; font-weight: 800; color: #fff; }
-:deep(.markdown-body h1) { font-size: 1.5rem; }
-:deep(.markdown-body h2) { font-size: 1.25rem; }
-:deep(.markdown-body ul, .markdown-body ol) { padding-left: 24px; margin-bottom: 16px; }
-:deep(.markdown-body li) { margin-bottom: 8px; }
-:deep(.markdown-body table) { width: 100%; border-collapse: collapse; margin-bottom: 16px; background: rgba(255, 255, 255, 0.03); border-radius: 8px; overflow: hidden; }
-:deep(.markdown-body th, .markdown-body td) { border: 1px solid rgba(255, 255, 255, 0.08); padding: 10px 14px; text-align: left; }
+:deep(.markdown-body p) { 
+  margin-bottom: 1.25rem; 
+  line-height: 1.75;
+}
+:deep(.markdown-body h1) { 
+  margin-top: 2rem; 
+  margin-bottom: 1rem; 
+  font-weight: 800; 
+  color: #fff; 
+  font-size: 1.6rem;
+  letter-spacing: -0.5px;
+}
+:deep(.markdown-body h2) { 
+  margin-top: 1.75rem; 
+  margin-bottom: 0.85rem; 
+  font-weight: 700; 
+  color: #f1f5f9; 
+  font-size: 1.3rem; 
+}
+:deep(.markdown-body ul, .markdown-body ol) { 
+  padding-left: 24px; 
+  margin-bottom: 1.5rem; 
+}
+:deep(.markdown-body li) { 
+  margin-bottom: 10px; 
+}
+:deep(.markdown-body hr) {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), transparent);
+  margin: 2.5rem 0;
+}
+:deep(.markdown-body table) { 
+  width: 100%; 
+  border-collapse: collapse; 
+  margin-bottom: 2rem; 
+  background: rgba(255, 255, 255, 0.03); 
+  border-radius: 8px; 
+  overflow: hidden; 
+}
+:deep(.markdown-body th, .markdown-body td) { 
+  border: 1px solid rgba(255, 255, 255, 0.08); 
+  padding: 12px 16px; 
+  text-align: left; 
+}
 :deep(.markdown-body th) { background: rgba(255, 255, 255, 0.05); color: #fff; font-weight: 800; }
 
 :deep(.code-block-wrapper) {
