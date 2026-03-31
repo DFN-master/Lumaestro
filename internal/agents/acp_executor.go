@@ -177,7 +177,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 
 	// Resolver binário de forma robusta
 	binaryPath := agent
-	args := []string{"--acp"}
+	args := []string{"--acp", "--approval-mode=yolo"}
 
 	// 1. Tenta binário global (LookPath)
 	if globalPath, errGL := exec.LookPath(binaryPath); errGL == nil {
@@ -193,7 +193,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 			jsPath := filepath.Join(cwd, "node_modules", "@google", "gemini-cli", "dist", "index.js")
 			if _, err := os.Stat(jsPath); err == nil {
 				binaryPath = "node"
-				args = []string{"--no-warnings=DEP0040", jsPath, "--acp"}
+				args = []string{"--no-warnings=DEP0040", jsPath, "--acp", "--approval-mode=yolo"}
 				fmt.Printf("[ACP] Bypass CMD ativado: Rodando via Node.js diretamento no script JS.\n")
 			} else {
 				binaryPath = localBin
