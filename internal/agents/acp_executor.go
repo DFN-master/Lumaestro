@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"Lumaestro/internal/config"
+	"Lumaestro/internal/utils"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -39,6 +40,12 @@ type ACPExecutor struct {
 	requestsMu        sync.Mutex
 	
 	Tools             *ToolRegistry // 🛠️ Biblioteca de ferramentas do Obsidian
+	
+	// Fila de execução para ferramentas (Semáforo)
+	execLock chan struct{}
+
+	// 📡 Agregador de logs de rede
+	NetLog *utils.NetworkLogger
 }
 
 // SessionInfo representa metadados de uma sessão ACP (Checkpoint)
@@ -67,6 +74,13 @@ type ACPSession struct {
 	// initDone sinaliza eventos de inicialização.
 	// Usamos buffer de 1 para evitar bloqueios ao sinalizar.
 	initDone chan struct{}
+	
+	// Trava de escrita para garantir integridade do JSON no stdin
+	WriteMu sync.Mutex
+
+	// Estados de log para evitar flooding no terminal
+	isLoggingThought bool
+	isLoggingMessage bool
 }
 
 // NewACPExecutor inicializa o novo executor JSON-RPC.
@@ -79,6 +93,8 @@ func NewACPExecutor() *ACPExecutor {
 		Tools:          NewToolRegistry(), // 🛠️ Inicializa as ferramentas Obsidian
 		pendingReviews: make(map[string]chan bool),
 		pendingRequests: make(map[int]chan JSONRPCMessage),
+		execLock:        make(chan struct{}, 1), // Apenas 1 ferramenta por vez
+		NetLog:          utils.NewNetworkLogger(5 * time.Second),
 	}
 }
 
@@ -154,8 +170,11 @@ func (e *ACPExecutor) SendRPC(s *ACPSession, msg JSONRPCMessage) error {
 		return err
 	}
 
+	// Garante que apenas um pacote seja escrito por vez no Pipe
+	s.WriteMu.Lock()
+	defer s.WriteMu.Unlock()
+
 	// ACP oficial usa Newline-Delimited JSON (ndJSON).
-	// Enviamos o JSON puro seguido de uma quebra de linha.
 	_, err = s.Stdin.Write(append(data, '\n'))
 	return err
 }
@@ -165,6 +184,7 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	e.Mu.Lock()
 	defer e.Mu.Unlock()
 	e.Ctx = ctx
+	e.Tools.Ctx = ctx
 
 	if s, ok := e.ActiveSessions[sessionID]; ok {
 		if s.Cancel != nil {
@@ -500,7 +520,7 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 
 	// 2. Notificações de Streaming de Sessão (O texto real da resposta)
 	if method == "session/update" {
-		fmt.Printf("[ACP RAW] session/update Recebido: %s\n", string(params))
+		h.Executor.NetLog.LogRequest() // 📡 Registra atividade de rede silenciosamente
 
 		var p struct {
 			Update struct {
@@ -514,19 +534,38 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 		if json.Unmarshal(params, &p) == nil {
 			update := p.Update
 			// Captura blocos de mensagem ou pensamentos
-			if update.SessionUpdate == "agent_message_chunk" || update.SessionUpdate == "agent_thought_chunk" {
+			if update.SessionUpdate == "agent_thought_chunk" {
 				if update.Content.Text != "" {
-					logType := "message"
-					if update.SessionUpdate == "agent_thought_chunk" {
-						logType = "thought"
+					if !h.Session.isLoggingThought {
+						utils.LogInfo(fmt.Sprintf("Processando raciocínio: %s...", strings.ToUpper(h.Session.AgentName)), "🧠")
+						h.Session.isLoggingThought = true
+						h.Session.isLoggingMessage = false // Reset o outro estado
 					}
 					
 					h.Executor.LogChan <- ExecutionLog{
 						Source:  h.Session.AgentName,
 						Content: update.Content.Text,
-						Type:    logType,
+						Type:    "thought",
 					}
 				}
+			} else if update.SessionUpdate == "agent_message_chunk" {
+				if update.Content.Text != "" {
+					if !h.Session.isLoggingMessage {
+						utils.LogInfo("A IA está gerando a orquestração final...", "💬")
+						h.Session.isLoggingMessage = true
+						h.Session.isLoggingThought = false // Reset o outro estado
+					}
+
+					h.Executor.LogChan <- ExecutionLog{
+						Source:  h.Session.AgentName,
+						Content: update.Content.Text,
+						Type:    "message",
+					}
+				}
+			} else if update.SessionUpdate == "agent_turn_complete" {
+				// Reset total ao fim do turno
+				h.Session.isLoggingThought = false
+				h.Session.isLoggingMessage = false
 			} else if update.SessionUpdate == "agent_message_error" || update.SessionUpdate == "error" {
 				// Relatar qualquer erro ou notificação inesperada
 				h.Executor.LogChan <- ExecutionLog{
@@ -540,7 +579,11 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 
 // HandleRequest lida com os pedidos de ferramenta (hands) da IA.
 func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json.RawMessage) {
-	fmt.Printf("[ACP DEBUG] Método Recebido: %s\n", method)
+	h.Executor.execLock <- struct{}{}
+	defer func() { <-h.Executor.execLock }()
+
+	utils.LogSection(fmt.Sprintf("FERRAMENTA: %s", method))
+	utils.LogInfo(fmt.Sprintf("IA solicitou acesso a: %s", method), "🔧")
 	// Normalização do método para compatibilidade entre dialetos (client/, fs/)
 	normMethod := strings.ToLower(method)
 	normMethod = strings.TrimPrefix(normMethod, "client/")
@@ -790,10 +833,20 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 
 	if rpcErr != nil {
 		fmt.Printf("<< Erro RPC Respondido [ID %v]: %s\n", id, rpcErr.Message)
-		// Reporta o erro no chat para o usuário não ficar no vácuo
-		h.Executor.LogChan <- ExecutionLog{
-			Source:  "ERROR",
-			Content: fmt.Sprintf("❌ Erro na Sinfonia ACP: %s", rpcErr.Message),
+		
+		// 🚨 CORREÇÃO CRÍTICA: Se o stream terminar vazio, precisamos avisar a UI para parar de carregar
+		if strings.Contains(rpcErr.Message, "Model stream ended with empty response") {
+			h.Executor.LogChan <- ExecutionLog{
+				Source:  "SYSTEM",
+				Content: "O Gemini decidiu não responder agora (Stream Vazio). Tente perguntar de outra forma.",
+			}
+			runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+		} else {
+			// Reporta o erro no chat para o usuário não ficar no vácuo
+			h.Executor.LogChan <- ExecutionLog{
+				Source:  "ERROR",
+				Content: fmt.Sprintf("❌ Erro na Sinfonia ACP: %s", rpcErr.Message),
+			}
 		}
 		return
 	}

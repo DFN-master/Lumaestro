@@ -30,51 +30,82 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   // Estado para revisões de segurança pendentes
   const pendingReview = ref(null);
 
+  // 🛡️ Monitor de Silêncio (Watchdog) para evitar timeouts prematuros
+  let safetyTimer = null;
+  const resetSafetyTimeout = () => {
+    if (safetyTimer) clearTimeout(safetyTimer);
+    
+    safetyTimer = setTimeout(() => {
+      if (isThinking.value) {
+        console.warn("[Store] Silence Timeout (25s) - A Sinfonia parece travada.");
+        isThinking.value = false;
+        messages.value.push({ 
+          role: 'assistant', 
+          text: "⚠️ A Sinfonia está demorando para responder. O processo ainda pode estar ativo no background.", 
+          mode: 'system' 
+        });
+      }
+    }, 25000);
+  };
+
+  const stopSafetyTimeout = () => {
+    if (safetyTimer) {
+      clearTimeout(safetyTimer);
+      safetyTimer = null;
+    }
+  };
+
   const initListeners = () => {
     // 0. Sinal de Início do Motor (Recuperação de Sessão)
     EventsOn('agent:starting', (agent) => {
       console.log("[Store] Motor ligando para:", agent);
       activeAgent.value = agent;
       isThinking.value = true; // Ativa o modo de carregamento
+      resetSafetyTimeout();
     });
 
     // 1. Logs Estruturados da IA (ACP)
     EventsOn('agent:log', (log) => {
-      console.log("[Store] Logs ACP:", log);
-      
-      if (log.source === 'SYSTEM') {
-        messages.value.push({ role: 'assistant', text: log.content, mode: 'system' });
+      console.log("[Store] 🎻 EVENTO RECEBIDO (agent:log):", log);
+      resetSafetyTimeout();
+
+      if (!log || (!log.content && !log.Content)) return;
+      const content = log.content || log.Content || "";
+      const source = log.source || log.Source || "Gemini";
+      const type = log.type || log.Type || "message";
+
+      // TRATAMENTO DE SISTEMA
+      if (source === 'SYSTEM' || source === 'ERROR' || source === 'CRAWLER') {
+        messages.value = [...messages.value, { role: 'assistant', text: content, mode: 'system', agent: source }];
         return;
       }
 
-      // Tratamento de mensagens da IA
+      // TRATAMENTO DE MENSAGENS E PENSAMENTOS DA IA
       let lastMsg = messages.value[messages.value.length - 1];
       
-      if (!lastMsg || lastMsg.role !== 'assistant' || lastMsg.mode === 'system' || lastMsg.agent !== log.source) {
+      // Se a última mensagem não for do assistente ou for de sistema, cria uma nova
+      if (!lastMsg || lastMsg.role !== 'assistant' || lastMsg.mode === 'system' || lastMsg.agent !== source) {
           lastMsg = { 
             role: 'assistant', 
             text: '', 
             thought: '',
-            agent: log.source || 'Maestro',
-            isPlanning: true // Começamos assumindo que ele está planejando
+            agent: source,
+            isPlanning: true
           };
-          messages.value.push(lastMsg);
+          messages.value = [...messages.value, lastMsg];
       }
 
-      // Lógica de Separação de Pensamento vs Texto (Protocolo Oficial ACP)
-      const content = log.content;
-      const logType = log.type || 'message'; // Default para compatibilidade
-
-      if (logType === 'thought') {
-          lastMsg.thought += content;
-      } else if (logType === 'message') {
-          lastMsg.isPlanning = false;
-          lastMsg.text += content;
+      // Atualiza a última mensagem (reatividade via índice para garantir o Vue)
+      const idx = messages.value.length - 1;
+      if (type === 'thought') {
+          messages.value[idx].thought += content;
       } else {
-          // Fallback para logs de sistema ou outros
-          lastMsg.text += content;
+          messages.value[idx].isPlanning = false;
+          messages.value[idx].text += content;
       }
       
+      // Forçar atualização do array (Sincronização definitiva)
+      messages.value = [...messages.value];
       isThinking.value = false;
     });
 
@@ -114,10 +145,21 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       await safeCall('main', 'SetupTool', agent);
     });
 
-    // 🚀 Sincronização de Sinfonias (Checkpoints): Quando o turno termina, atualizamos a lista lateral
-    window.runtime.EventsOn("agent:turn_complete", (agent) => {
-      console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias...`);
+    // 🚀 Sincronização de Sinfonias (Checkpoints): Quando o turno termina, atualizamos a lista lateral e consolidamos a memória
+    window.runtime.EventsOn("agent:turn_complete", async (agent) => {
+      console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias e Consolidando Memória...`);
+      stopSafetyTimeout(); // 🛑 Turno finalizado, para o cronômetro
+      isThinking.value = false;
       fetchSessions(agent);
+
+      // Consolidação de Conhecimento RAG em tempo real
+      const sessionID = currentACPID.value || 'default';
+      const lastMessages = messages.value.slice(-2).map(m => `${m.role}: ${m.text}`).join("\n");
+      
+      if (lastMessages) {
+        console.log("[Store] Disparando ConsolidateChatKnowledge para sessão:", sessionID);
+        await safeCall('main', 'ConsolidateChatKnowledge', sessionID, lastMessages);
+      }
     });
 
     // 4. Watcher de Resiliência: Mantém a UI síncrona com a realidade do Backend
@@ -233,19 +275,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     });
     
     isThinking.value = true; // Feedback visual imediato
-
-    // Timeout de segurança: se a IA hibernar por 25s, destravamos a UI
-    const safetyTimeout = setTimeout(() => {
-      if (isThinking.value) {
-        console.warn("[Store] Timeout de segurança atingido. Destravando UI.");
-        isThinking.value = false;
-        messages.value.push({ 
-          role: 'assistant', 
-          text: "⚠️ A Sinfonia está demorando para responder. O processo ainda pode estar ativo no background.", 
-          mode: 'system' 
-        });
-      }
-    }, 25000);
+    resetSafetyTimeout(); // Inicia o contador de silêncio
 
     try {
       // 🛠️ SINCRONIZAÇÃO CRÍTICA: Agora enviamos 3 argumentos conforme o novo contrato Go
@@ -254,7 +284,7 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     } catch (err) {
       console.error('[Store] Erro ao enviar input:', err);
       isThinking.value = false;
-      clearTimeout(safetyTimeout);
+      stopSafetyTimeout();
     }
   };
 

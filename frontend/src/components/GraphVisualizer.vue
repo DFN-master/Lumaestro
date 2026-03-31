@@ -1,252 +1,271 @@
 <script setup>
-import * as d3 from 'd3'
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { EventsOn } from '../../wailsjs/runtime'
+import * as THREE from 'three'
 import { ScanVault } from '../../wailsjs/go/main/App'
 
 const props = defineProps({
   nodes: { type: Array, default: () => [] },
   edges: { type: Array, default: () => [] },
   graphLogs: { type: Array, default: () => [] },
-  activeNode: { type: String, default: null } // O Roteador de Luz (Nó atual pensando na AI)
+  activeNode: { type: String, default: null } 
 })
 
-const svgRef = ref(null)
 const containerRef = ref(null)
 const logContainerRef = ref(null)
-const getSafeId = (id) => `node-${id.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+const highlightedLinks = ref(new Set()) // Armazena IDs de links destacados
+let Graph = null
 
-let simulation = null
-let svg = null
-let g = null
-let linkGroup = null
-let nodeGroup = null
+const selectedNode = ref(null)
+const nodeDetails = ref(null)
+const graphHealth = ref({ density: 0, conflicts: 0, active_nodes: 0 })
 
-// Shadow State para a Fisica Limpa do D3 (Blindado contra Proxies de Vue3)
-const localNodesMap = new Map()
-const localEdgesMap = new Map()
-const localNodesList = []
-const localEdgesList = []
-
-// Setup inicial do "Palco" (SVG, Filtros, Zoom e Forças Base) apenas UMA vez!
-const mountGraphEnvironment = () => {
-  if (!svgRef.value || !containerRef.value) return
-
-  const width = containerRef.value.clientWidth
-  const height = containerRef.value.clientHeight
-
-  svg = d3.select(svgRef.value)
-    .attr('width', '100%')
-    .attr('height', '100%')
-    .attr('viewBox', `0 0 ${width} ${height}`)
-
-  svg.selectAll("*").remove() 
-
-  // Efeitos GLOW Dourado
-  const defs = svg.append('defs')
-  const filter = defs.append('filter').attr('id', 'glow').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%')
-  filter.append('feGaussianBlur').attr('stdDeviation', '2.5').attr('result', 'coloredBlur')
-  const feMerge = filter.append('feMerge')
-  feMerge.append('feMergeNode').attr('in', 'coloredBlur')
-  feMerge.append('feMergeNode').attr('in', 'SourceGraphic')
-  
-  // Destaque Glow Ativo (Amarelo Raciocínio)
-  const filterActive = defs.append('filter').attr('id', 'glow-active').attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%')
-  filterActive.append('feGaussianBlur').attr('stdDeviation', '5').attr('result', 'coloredBlur')
-  const feMergeA = filterActive.append('feMerge')
-  feMergeA.append('feMergeNode').attr('in', 'coloredBlur')
-  feMergeA.append('feMergeNode').attr('in', 'SourceGraphic')
-
-  g = svg.append('g')
-
-  // Zoom behavior
-  const zoom = d3.zoom().scaleExtent([0.1, 4]).on('zoom', (event) => g.attr('transform', event.transform))
-  svg.call(zoom)
-
-  // Criar camadas separadas para Nodes sobrepor Links sempre.
-  linkGroup = g.append('g').attr('class', 'links')
-  nodeGroup = g.append('g').attr('class', 'nodes')
-
-  // Inicializa Físicas Vázias.
-  simulation = d3.forceSimulation()
-    .force('link', d3.forceLink().id(d => d.id).distance(150))
-    .force('charge', d3.forceManyBody().strength(-500))
-    .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide().radius(30))
+const checkHealth = async () => {
+  try {
+    const stats = await window.go.main.App.AnalyzeGraphHealth()
+    graphHealth.value = stats
+  } catch (e) {
+    console.error("Erro ao analisar saúde:", e)
+  }
 }
 
-// O Update "Cérebro Vivo": Não limpa, ele dá JOIN em dados que chegam
-const updateGraph = () => {
-  if (!simulation) return
+const closeDetails = () => {
+  selectedNode.value = null
+  nodeDetails.value = null
+}
 
-  // 1. Clonagem e Hidratação dos Shadow Arrays
+const openSource = async () => {
+  if (nodeDetails.value && nodeDetails.value.path) {
+    await window.go.main.App.OpenFileInEditor(nodeDetails.value.path)
+  }
+}
+
+// Converte os dados para o formato do 3d-force-graph (incluindo nós virtuais)
+const getGraphData = () => {
+  const nodesMap = new Map()
+  
+  // 1. Adicionar nós reais
   props.nodes.forEach(n => {
-    if (!localNodesMap.has(n.id)) {
-      const cw = containerRef.value?.clientWidth || 500
-      const ch = containerRef.value?.clientHeight || 500
-      
-      const clone = { 
-         ...n, 
-         x: cw / 2 + (Math.random() - 0.5) * 50,
-         y: ch / 2 + (Math.random() - 0.5) * 50
-      }
-      localNodesMap.set(n.id, clone)
-      localNodesList.push(clone)
-    }
+    nodesMap.set(n.id, { ...n })
   })
 
-  // 1.5 Criação de Nós Virtuais (Para links que ainda não existem como arquivos)
-  props.edges.forEach(e => {
-    const t = e.target.id || e.target
-    if (!localNodesMap.has(t)) {
-      const cw = containerRef.value?.clientWidth || 500
-      const ch = containerRef.value?.clientHeight || 500
-      const virtualNode = { 
-        id: t, 
-        name: t, 
-        virtual: true,
-        x: cw / 2 + (Math.random() - 0.5) * 50,
-        y: ch / 2 + (Math.random() - 0.5) * 50
-      }
-      localNodesMap.set(t, virtualNode)
-      localNodesList.push(virtualNode)
-    }
-  })
-
-  // Higieniza as arestas (Recria a cada tick)
-  localEdgesList.length = 0
-  localEdgesMap.clear()
-
+  // 2. Adicionar nós virtuais a partir de conexões que não existem em 'nodes'
   props.edges.forEach(e => {
     const s = e.source.id || e.source
     const t = e.target.id || e.target
-    const key = `${s}-${t}`
     
-    if (localNodesMap.has(s) && localNodesMap.has(t)) {
-        if (!localEdgesMap.has(key)) {
-          const clone = { ...e, source: s, target: t }
-          localEdgesMap.set(key, clone)
-          localEdgesList.push(clone)
-        }
-    }
+    if (!nodesMap.has(s)) nodesMap.set(s, { id: s, name: s, virtual: true })
+    if (!nodesMap.has(t)) nodesMap.set(t, { id: t, name: t, virtual: true })
   })
 
-  // 2. UPDATE EDGES (Energia Fluindo)
-  const links = linkGroup.selectAll("line").data(localEdgesList, d => `${d.source.id || d.source}-${d.target.id || d.target}`)
-  const linksEnter = links.enter()
-    .append("line")
-    .attr("class", "edge-flow")
-    .attr("stroke", "rgba(59, 130, 246, 0.4)")
-    .attr("stroke-width", 2)
-  links.exit().remove()
-  const allLinks = linksEnter.merge(links)
+  const links = props.edges.map(e => ({
+    source: e.source.id || e.source,
+    target: e.target.id || e.target,
+    ...e
+  }))
 
-  // 3. UPDATE NODES
-  const nodes = nodeGroup.selectAll("g").data(localNodesList, d => d.id)
-  const nodesEnter = nodes.enter().append("g")
-      .call(d3.drag()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended))
-
-  // Círculos LUMINOSOS
-  nodesEnter.append("circle")
-    .attr("r", 0) 
-    .attr("fill", d => d.virtual ? "rgba(59, 130, 246, 0.2)" : "var(--primary)")
-    .attr("stroke", d => d.virtual ? "rgba(59, 130, 246, 0.5)" : "none")
-    .attr("stroke-dasharray", d => d.virtual ? "2,2" : "none")
-    .attr("filter", d => d.virtual ? "none" : "url(#glow)")
-    .attr("class", "node-circle")
-    .attr("id", d => getSafeId(d.id))
-    .transition().duration(500).attr("r", d => d.virtual ? 4 : 6)
-
-  // Nomes 
-  nodesEnter.append("text")
-    .text(d => d.name || d.id)
-    .attr("x", 12).attr("y", 4)
-    .attr("class", "node-label")
-    .style("opacity", d => d.virtual ? 0.3 : 1)
-
-  nodes.exit().remove()
-  const allNodes = nodesEnter.merge(nodes)
-
-  // 4. REINICIAR GRAVIDADES DESACOLHADAS DE VUE
-  simulation.nodes(localNodesList)
-  simulation.force("link").links(localEdgesList)
-  simulation.alpha(1).restart() // Aumentado para 1 para dar mais "vida" ao movimento
-
-  simulation.on("tick", () => {
-    allLinks.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
-            .attr("x2", d => d.target.x).attr("y2", d => d.target.y)
-    allNodes.attr("transform", d => `translate(${d.x}, ${d.y})`)
-  })
-
-  function dragstarted(event, d) { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
-  function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
-  function dragended(event, d) { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }
+  return { 
+    nodes: Array.from(nodesMap.values()), 
+    links 
+  }
 }
 
-// ==========================================
-// 🌟 EFEITO RAG TRACKER (PULO DA SINAPSE) 🌟
-// ==========================================
-watch(() => props.activeNode, (newId) => {
-  if (!nodeGroup) return
-  
-  // Apaga as notas anteriores (Reseta p/ Azul Padrão)
-  nodeGroup.selectAll("circle")
-    .transition().duration(200)
-    .attr("fill", "var(--primary)").attr("r", 6).style("filter", "url(#glow)")
+const initGraph = () => {
+  if (!containerRef.value) return
 
-  if (newId) {
-    // ⚡ ALPHA BOOST: Pulso de energia física na simulação ao ativar nota (Feel TrustGraph)
-    if (simulation) simulation.alpha(0.8).restart()
-
-    // ⚡ PULSO DE ENERGIA (Sinapses): Brilho nos caminhos conectados
-    if (linkGroup) {
-      linkGroup.selectAll(".edge-flow")
-        .classed("edge-active", d => {
-          const sourceId = d.source.id || d.source
-          const targetId = d.target.id || d.target
-          return sourceId === newId || targetId === newId
-        })
+  Graph = ForceGraph3D()(containerRef.value)
+    .graphData(getGraphData())
+    .backgroundColor('#09090b') 
+    .showNavInfo(false)
+    .nodeLabel(node => {
+      const type = node['document-type'] || 'chunk'
+      const label = node.name || node.id
+      const icon = type === 'system' ? '⚙️' : (type === 'source' ? '📄' : (type === 'memory' ? '🧠' : '📝'))
+      return `<div class="node-tooltip">
+                <span class="type-tag ${type}">${icon} ${type.toUpperCase()}</span>
+                <br/><b>${label}</b>
+              </div>`
+    })
+    .nodeRelSize(1) // Escala base 1 para usar as geometrias customizadas precisamente
+    .nodeOpacity(0.9)
+    .linkColor(link => {
+      const s = link.source.id || link.source
+      const t = link.target.id || link.target
       
-      // Remove o pulso após um tempo (raciocínio passou)
-      setTimeout(() => {
-        if (linkGroup) {
-          linkGroup.selectAll(".edge-active").classed("edge-active", false)
-        }
-      }, 3000)
+      // Se o link está na trilha de raciocínio, acende em verde néon
+      if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) {
+        return '#4ade80' 
+      }
+      return 'rgba(59, 130, 246, 0.3)'
+    })
+    .linkWidth(link => {
+      const s = link.source.id || link.source
+      const t = link.target.id || link.target
+      if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) {
+        return 2.5 // Espessura dupla para destaque
+      }
+      return 0.5
+    })
+    .linkDirectionalParticles(link => {
+      const s = link.source.id || link.source
+      const t = link.target.id || link.target
+      return (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) ? 5 : 1
+    })
+    .linkDirectionalParticleSpeed(0.005)
+    .linkDirectionalParticleWidth(link => {
+      const s = link.source.id || link.source
+      const t = link.target.id || link.target
+      return (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) ? 3 : 1
+    })
+    .onNodeClick(async node => {
+      // Zoom no nó ao clicar
+      const distance = 60
+      const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z)
+      Graph.cameraPosition(
+        { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }, 
+        node, 
+        2000
+      )
+
+      // Carregar Proveniência (Auditoria)
+      selectedNode.value = node
+      try {
+        const details = await window.go.main.App.GetNodeDetails(node.id)
+        nodeDetails.value = details
+      } catch (e) {
+        console.error("Erro ao buscar detalhes:", e)
+      }
+    })
+
+  // 🚀 CONFIGURAÇÃO DE FÍSICA SOLAR (NUCLEAÇÃO E ÓRBITAS)
+  Graph.d3Force('charge').strength(node => {
+      // Núcleos (Sóis) repelem mais para abrir espaço, Ideias repelem menos
+      const type = node['document-type'] || 'chunk'
+      return (type === 'chunk' || type === 'system') ? -1000 : -200
+  })
+
+  Graph.d3Force('link').distance(link => {
+      const sType = link.source['document-type'] || 'chunk'
+      const tType = link.target['document-type'] || 'chunk'
+      
+      // Órbita Próxima: Ideias conectadas a Notas (30px)
+      if (sType === 'memory' || tType === 'memory') return 30
+      
+      // Distância Interestelar: Notas conectadas entre si (150px)
+      return 150
+  }).strength(1)
+
+  Graph.nodeThreeObject(node => {
+    const isVirtual = node.virtual
+    const isActive = node.id === props.activeNode
+    
+    // Lógica consolidada de tipos e status
+    const type = node['status'] === 'legacy' ? 'legacy' : (node['status'] === 'conflict' ? 'conflict' : (node['document-type'] || node['document_type'] || 'chunk'))
+    
+    const colors = {
+      source: '#a855f7', // Roxo (Original)
+      page: '#22d3ee',   // Ciano (Página)
+      chunk: '#3b82f6',  // Azul Neon
+      system: '#f1f5f9', // Platina (Sistema)
+      memory: '#f472b6', // Rosa (Sinapse de Chat)
+      legacy: '#475569', // Cinza (Inativo/Legado)
+      conflict: '#ef4444', // Vermelho (Contradição/Alerta)
+      virtual: '#1e3a8a',// Azul Escuro (Fantasma)
+      active: '#fcd34d'  // Ouro (Foco)
     }
 
-    // Acende a Bola Lida pela IA (Amarelo Ouro + Gigante + Pulsação)
-    const safeId = getSafeId(newId)
-    // Seletor mais robusto usando atributo ID exato (evita falhas com caracteres especiais do CSS)
-    const target = nodeGroup.select(`[id="${safeId}"]`)
+    // Se o nó estiver em conflito ou for legado, sobrepõe a cor
+    const displayColor = node.status === 'conflict' ? colors.conflict : (node.status === 'legacy' ? colors.legacy : (colors[type] || colors.chunk))
+    const nodeColor = isActive ? colors.active : (isVirtual ? colors.virtual : displayColor)
     
-    target.transition().duration(400)
-      .attr("fill", "#fcd34d")
-      .attr("r", 15)
-      .style("filter", "drop-shadow(0 0 15px #fcd34d)")
-      .on("end", function() {
-          d3.select(this).classed("pulse-ring", true)
-      })
+    // Esferas com tamanhos diferentes por importância (NÚCLEOS vs IDEIAS)
+    let radius = 1.2 // Tamanho base para Ideias
+    if (isActive) radius = 5.0
+    else if (type === 'chunk' || type === 'system') radius = 4.0 // Os "Sóis" do conhecimento
+    else if (type === 'source') radius = 3.0
+    else if (isVirtual) radius = 0.8
 
-    // Decaimento natural após o "pensamento" passar (opcional, mas charmoso)
-    target.transition().delay(5000).duration(2000)
-      .attr("fill", "var(--primary)")
-      .attr("r", 6)
-      .style("filter", "url(#glow)")
-      .on("start", function() {
-          d3.select(this).classed("pulse-ring", false)
-      })
+    const geometry = new THREE.SphereGeometry(radius)
+    const material = new THREE.MeshStandardMaterial({
+      color: nodeColor,
+      transparent: true,
+      opacity: type === 'legacy' ? 0.3 : (isVirtual ? 0.3 : 0.9),
+      metalness: 0.8,
+      roughness: 0.1
+    })
+    
+    const mesh = new THREE.Mesh(geometry, material)
+    
+    // Brilho Neon (Emissivo)
+    if (!isVirtual) {
+       mesh.material.emissive = new THREE.Color(nodeColor)
+       mesh.material.emissiveIntensity = isActive ? 1.5 : 0.6
+    }
+
+    return mesh
+  })
+
+  // Loop de animação e pulso (opcional se o force-graph já lidar bem)
+}
+
+// Watchers para sincronização
+watch(() => [props.nodes, props.edges], () => {
+  if (Graph) {
+    Graph.graphData(getGraphData())
+  }
+}, { deep: true })
+
+watch(() => props.activeNode, (newId) => {
+  if (!Graph || !newId) return
+
+  const node = Graph.graphData().nodes.find(n => n.id === newId)
+  if (node) {
+    // 1. Fly-to suave para o "Foco do Pensamento"
+    Graph.cameraPosition(
+      { x: node.x + 100, y: node.y + 100, z: node.z + 100 }, 
+      node, 
+      2000
+    )
+    
+    // 2. Adicionar uma luz dinâmica temporária no nó ativo
+    const light = new THREE.PointLight(0xfcd34d, 2, 100)
+    light.position.set(node.x, node.y, node.z)
+    Graph.scene().add(light)
+    setTimeout(() => { Graph.scene().remove(light) }, 3000)
+
+    // 3. Refresh visual
+    Graph.nodeThreeObject(Graph.nodeThreeObject()) 
   }
 })
 
-// Reatividade
-watch(() => [props.nodes, props.edges], () => {
-  updateGraph()
-}, { deep: true })
+// Escutar Destaques de Trajetória (Context-Flow inspirado no TrustGraph)
+onMounted(() => {
+  window.runtime.EventsOn('graph:highlight', (linkData) => {
+    // Criamos uma chave única para o link bidirecional
+    const linkId1 = `${linkData.source}-${linkData.target}`
+    const linkId2 = `${linkData.target}-${linkData.source}`
+    
+    highlightedLinks.value.add(linkId1)
+    highlightedLinks.value.add(linkId2)
+    
+    // Forçar atualização visual das arestas (links) no motor Three.js
+    if (Graph) {
+      Graph.linkColor(Graph.linkColor())
+      Graph.linkWidth(Graph.linkWidth())
+    }
 
-// Auto-Scroll Raciocínio (Logs descendo na telinha lateral)
+    // Efeito de Rastro: O brilho desaparece após 4 segundos (Cinemático)
+    setTimeout(() => {
+      highlightedLinks.value.delete(linkId1)
+      highlightedLinks.value.delete(linkId2)
+      if (Graph) {
+        Graph.linkColor(Graph.linkColor())
+        Graph.linkWidth(Graph.linkWidth())
+      }
+    }, 4000)
+  })
+})
+
 watch(() => props.graphLogs, () => {
   nextTick(() => {
     if (logContainerRef.value) {
@@ -255,12 +274,54 @@ watch(() => props.graphLogs, () => {
   })
 }, { deep: true })
 
+const currentConflict = ref(null)
 onMounted(() => {
-  mountGraphEnvironment()
-  updateGraph()
+  initGraph()
+  
+  // Listener de Conflitos do Agente Validador
+  window.runtime.EventsOn("graph:conflict", (conflict) => {
+    currentConflict.value = conflict
+    console.warn("⚠️ CONFLITO DETECTADO:", conflict)
+  })
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    if (Graph && containerRef.value) {
+      Graph.width(containerRef.value.clientWidth)
+      Graph.height(containerRef.value.clientHeight)
+    }
+  })
 })
 
-const resetZoom = () => svg.transition().duration(750).call(d3.zoom().transform, d3.zoomIdentity)
+const resolveConflict = async (decision) => {
+  if (!currentConflict.value) return
+  
+  const c = currentConflict.value
+  console.log("Resolvendo conflito com decisão:", decision)
+  
+  try {
+    // 🛠️ Chamada RPC para o Agente Validador no Go
+    await window.go.main.App.ResolveConflict(
+      decision, 
+      c.subject, 
+      c.predicate, 
+      c.old_id, 
+      c.new, 
+      c.session_id
+    )
+    currentConflict.value = null
+  } catch (err) {
+    console.error("Falha ao resolver conflito:", err)
+  }
+}
+
+onUnmounted(() => {
+  if (Graph) Graph._destructor() // Limpeza de memória
+})
+
+const resetZoom = () => {
+  if (Graph) Graph.zoomToFit(800)
+}
 
 const scanning = ref(false)
 const triggerScan = async () => {
@@ -271,20 +332,20 @@ const triggerScan = async () => {
   } catch (error) {
     console.error("Erro no Scan:", error)
   } finally {
-    setTimeout(() => { scanning.value = false }, 1000)
-  }
+    }
 }
 </script>
 
 <template>
-  <div class="graph-wrapper animate-fade-in" ref="containerRef">
-    <svg ref="svgRef" class="main-svg"></svg>
+  <div class="graph-wrapper animate-fade-in">
+    <!-- Container para o Grafo 3D (WebGL) -->
+    <div ref="containerRef" class="main-canvas"></div>
     
     <!-- Controles & Console de Logs (Painel de Pensamento Vidrado) -->
     <div class="graph-ui glass">
       <div class="ui-header">
         <span class="pulse"></span>
-        <h3>Conhecimento Obsidian</h3>
+        <h3>Conhecimento Obsidian 3D</h3>
       </div>
       
       <div class="ui-actions">
@@ -298,13 +359,86 @@ const triggerScan = async () => {
         </div>
       </div>
 
+      <!-- HUD DE SAÚDE DO GRAFO (HEALTH MONITOR) -->
+      <div class="graph-health-hud">
+        <div class="health-info">
+          <div class="health-stat">
+            <span class="label">DENSIDADE</span>
+            <span class="value">{{ (graphHealth.density * 100).toFixed(0) }}%</span>
+          </div>
+          <div class="health-stat" :class="{'has-conflicts': graphHealth.conflicts > 0}">
+            <span class="label">CONFLITOS</span>
+            <span class="value">{{ graphHealth.conflicts }}</span>
+          </div>
+        </div>
+        <button @click="checkHealth" class="health-btn" title="Analisar Integridade">🛡️ CHECK</button>
+      </div>
+
       <!-- O CONSOLE VIVO DO RACIOCÍNIO IA -->
       <div class="graph-logs-console" ref="logContainerRef" v-if="graphLogs.length > 0">
         <div v-for="(log, idx) in graphLogs" :key="idx" class="log-entry">
           <span class="log-text">{{ log }}</span>
         </div>
       </div>
+    </div> <!-- Fim da graph-ui -->
+
+    <!-- POP-UP DE VALIDAÇÃO (AGENTE DA VERDADE) -->
+    <div v-if="currentConflict" class="conflict-overlay">
+      <div class="conflict-modal glass">
+        <div class="conflict-header">
+          <span class="alert-icon">⚠️</span>
+          <h4>Contradição Semântica</h4>
+        </div>
+        <p>A IA detectou uma divergência sobre <b>{{ currentConflict.subject }}</b>:</p>
+        <div class="conflict-options">
+          <div class="opt old" @click="resolveConflict('old')">
+            <span class="lab">PASSADO</span>
+            <span class="val">{{ currentConflict.old }}</span>
+          </div>
+          <div class="opt new" @click="resolveConflict('new')">
+            <span class="lab">PRESENTE</span>
+            <span class="val">{{ currentConflict.new }}</span>
+          </div>
+        </div>
+        <p class="hint">Escolha a verdade ativa. A outra será marcada como legado.</p>
+      </div>
     </div>
+
+    <!-- PAINEL DE PROVENIÊNCIA (AUDITORIA) -->
+    <transition name="slide-fade">
+      <aside v-if="selectedNode" class="provenance-panel glass">
+        <header class="panel-header">
+          <div class="header-content">
+            <div class="source-icon">🔎</div>
+            <h3>Proveniência</h3>
+          </div>
+          <button @click="closeDetails" class="close-btn">×</button>
+        </header>
+
+        <div class="panel-body">
+          <div v-if="nodeDetails" class="details-content">
+            <div class="info-group">
+              <label>DOCUMENTO ORIGEM</label>
+              <p class="source-path">{{ nodeDetails.path || "Memória de Chat" }}</p>
+            </div>
+
+            <div class="info-group">
+              <label>TRECHO FUNDAMENTADO (CHUNK)</label>
+              <div class="content-preview">
+                {{ nodeDetails.content || "Fato atomizado sem conteúdo textual." }}
+              </div>
+            </div>
+
+            <button v-if="nodeDetails.path" @click="openSource" class="btn-open-source">
+              ABRIR ARQUIVO FONTE ✨
+            </button>
+          </div>
+          <div v-else class="loading-provenance">
+            <span>Buscando linhagem...</span>
+          </div>
+        </div>
+      </aside>
+    </transition>
 
     <!-- Background Imersivo -->
     <div class="graph-bg"></div>
@@ -318,35 +452,260 @@ const triggerScan = async () => {
   background: var(--bg-dark);
   position: relative;
   overflow: hidden;
+  pointer-events: auto; /* Garante que o wrapper receba eventos */
 }
 
-.main-svg {
-  position: relative;
+.main-canvas {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
   z-index: 2;
-  cursor: grab;
+  pointer-events: auto; /* Indispensável para o mouse/zoom do force-graph */
 }
 
-.main-svg:active { cursor: grabbing; }
-
-/* Node Styling */
-:deep(.node-label) {
-  font-family: 'Outfit', sans-serif;
-  font-size: 10px;
-  fill: rgba(255, 255, 255, 0.4);
-  pointer-events: none;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-  transition: opacity 0.3s, fill 0.3s;
+/* PROVENANCE UI STYLES */
+.provenance-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 380px;
+  max-height: calc(100% - 40px);
+  z-index: 1000;
+  border-radius: 20px;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  backdrop-filter: blur(25px);
+  background: rgba(15, 23, 42, 0.7);
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-:deep(g:hover .node-label) {
-  fill: white;
-  font-size: 12px;
+.panel-header {
+  padding: 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-content h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.close-btn:hover {
   opacity: 1;
 }
 
-:deep(.node-circle) {
-  transition: r 0.3s, fill 0.3s;
+.panel-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.info-group label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  letter-spacing: 1.5px;
+}
+
+.source-path {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  word-break: break-all;
+  background: rgba(0,0,0,0.2);
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.content-preview {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+  background: rgba(255,255,255,0.03);
+  padding: 15px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.btn-open-source {
+  padding: 14px;
+  background: var(--primary);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  font-weight: 800;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+  margin-top: 10px;
+}
+
+.btn-open-source:hover {
+  transform: translateY(-2px);
+  background: #2563eb;
+  box-shadow: 0 8px 30px rgba(59, 130, 246, 0.5);
+}
+
+.loading-provenance {
+  padding: 40px;
+  text-align: center;
+  color: var(--primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.slide-fade-enter-active, .slide-fade-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-fade-enter-from, .slide-fade-leave-to {
+  transform: translateX(20px);
+  opacity: 0;
+}
+
+/* Tooltip customizado para o space 3D */
+:deep(.node-tooltip) {
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 10px;
+  color: white;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+  backdrop-filter: blur(4px);
+}
+
+:deep(.type-tag) {
+  font-size: 8px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  display: inline-block;
+  letter-spacing: 1px;
+}
+
+:deep(.type-tag.source) { background: rgba(168, 85, 247, 0.2); color: #a855f7; border: 1px solid #a855f7; }
+:deep(.type-tag.page) { background: rgba(34, 211, 238, 0.2); color: #22d3ee; border: 1px solid #22d3ee; }
+:deep(.type-tag.chunk) { background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid #3b82f6; }
+:deep(.type-tag.system) { background: rgba(248, 250, 252, 0.2); color: #f8fafc; border: 1px solid #f8fafc; }
+:deep(.type-tag.memory) { background: rgba(244, 114, 182, 0.2); color: #f472b6; border: 1px solid #f472b6; }
+:deep(.type-tag.legacy) { background: rgba(71, 85, 105, 0.2); color: #94a3b8; border: 1px solid #94a3b8; }
+:deep(.type-tag.conflict) { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid #ef4444; }
+
+/* Conflict Modal UI */
+.conflict-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.conflict-modal {
+  padding: 2rem;
+  border-radius: 24px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  max-width: 450px;
+  width: 90%;
+  text-align: center;
+}
+
+.conflict-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.conflict-header h4 {
+  margin: 0;
+  color: #ef4444;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.conflict-options {
+  display: flex;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.opt {
+  flex: 1;
+  padding: 1.5rem;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.opt:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: var(--primary);
+  transform: translateY(-4px);
+}
+
+.opt.new:hover { border-color: #f472b6; }
+
+.opt .lab {
+  display: block;
+  font-size: 0.6rem;
+  opacity: 0.5;
+  margin-bottom: 8px;
+}
+
+.opt .val {
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.hint {
+  font-size: 0.7rem;
+  opacity: 0.6;
 }
 
 /* UI Panel */
@@ -421,6 +780,63 @@ const triggerScan = async () => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+}
+
+/* GRAPH HEALTH HUD */
+.graph-health-hud {
+  margin-top: 10px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.health-info {
+  display: flex;
+  gap: 15px;
+}
+
+.health-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.health-stat .label {
+  font-size: 0.5rem;
+  font-weight: 800;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+.health-stat .value {
+  font-size: 0.8rem;
+  font-weight: 900;
+  color: #4ade80;
+}
+
+.has-conflicts .value {
+  color: #ef4444;
+  animation: pulse-red 1s infinite;
+}
+
+.health-btn {
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@keyframes pulse-red {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
 }
 
 .val {

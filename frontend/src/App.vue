@@ -6,7 +6,9 @@ import ChatPanel from './components/ChatPanel.vue'
 import GraphVisualizer from './components/GraphVisualizer.vue'
 import HistorySidebar from './components/HistorySidebar.vue'
 import Settings from './components/Settings.vue'
+import DocViewer from './components/DocViewer.vue'
 import { useOrchestratorStore } from './stores/orchestrator'
+import { GetProjectDoc } from '../wailsjs/go/main/App'
 
 const orchestrator = useOrchestratorStore()
 const currentView = ref('orchestrator') // views: orchestrator, settings
@@ -23,8 +25,25 @@ const state = reactive({
   nodes: [],
   edges: [],
   graphLogs: [],
-  activeNode: null
+  activeNode: null,
+  // Estado para o Visuzalizador de Documentos
+  docViewer: {
+    isOpen: false,
+    title: '',
+    content: ''
+  }
 })
+
+const openDoc = async (name, title) => {
+  try {
+    const content = await GetProjectDoc(name)
+    state.docViewer.title = title
+    state.docViewer.content = content
+    state.docViewer.isOpen = true
+  } catch (err) {
+    console.error("Erro ao carregar documento:", err)
+  }
+}
 
 // ── Resize Handle Logic ──
 const startResize = (e) => {
@@ -115,8 +134,17 @@ onMounted(async () => {
     <aside class="sidebar glass">
       <div class="logo">LM</div>
       <nav>
-        <button @click="currentView = 'orchestrator'" :class="{ active: currentView === 'orchestrator' }">🧠</button>
-        <button @click="currentView = 'settings'" :class="{ active: currentView === 'settings' }">⚙️</button>
+        <button @click="currentView = 'orchestrator'" :class="{ active: currentView === 'orchestrator' }" title="Cérebro & Grafo">🧠</button>
+        
+        <div class="sidebar-divider"></div>
+        
+        <button @click="openDoc('tasks', 'Checklist de Tarefas')" title="Tarefas e Progresso">📋</button>
+        <button @click="openDoc('implementation', 'Plano de Implementação')" title="Arquitetura do Sistema">📐</button>
+        <button @click="openDoc('walkthrough', 'Guia de Uso')" title="Manual de Operação">📖</button>
+        
+        <div class="sidebar-divider"></div>
+        
+        <button @click="currentView = 'settings'" :class="{ active: currentView === 'settings' }" title="Configurações">⚙️</button>
       </nav>
       <!-- Indicador de Status -->
       <div class="status-indicator">
@@ -156,6 +184,14 @@ onMounted(async () => {
         <Settings />
       </template>
     </main>
+
+    <!-- Visualizador de Inteligência do Projeto -->
+    <DocViewer 
+      :isOpen="state.docViewer.isOpen" 
+      :title="state.docViewer.title" 
+      :content="state.docViewer.content" 
+      @close="state.docViewer.isOpen = false"
+    />
   </div>
 </template>
 
@@ -209,6 +245,13 @@ nav button.active {
   background: rgba(59, 130, 246, 0.12);
   transform: scale(1.05);
   box-shadow: inset 0 0 12px rgba(79, 172, 254, 0.15);
+}
+
+.sidebar-divider {
+  width: 20px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 10px 0;
 }
 
 .status-indicator {

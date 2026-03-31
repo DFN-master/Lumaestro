@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"Lumaestro/internal/provider"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // KnowledgeWeaver é o "Tecelão de Conhecimento" que transforma conversas em sinapses.
 type KnowledgeWeaver struct {
-	Ontology  *provider.OntologyService
-	Qdrant    *provider.QdrantClient
-	Embedder  *provider.EmbeddingService
+	Ontology *provider.OntologyService
+	Qdrant   *provider.QdrantClient
+	Embedder *provider.EmbeddingService
 }
 
 // NewKnowledgeWeaver inicializa o tecelão.
@@ -25,45 +26,91 @@ func NewKnowledgeWeaver(ontology *provider.OntologyService, qdrant *provider.Qdr
 	}
 }
 
-// WeaveChatKnowledge analisa o texto do chat, extrai fatos e os integra ao grafo.
-func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, chatText string) error {
+// WeaveChatKnowledge analisa o texto do chat, extrai fatos e os integra ao grafo com consciência de sessão.
+func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID string, chatText string) error {
 	// 1. Extração de Triplas (Sinapses)
-	triples, err := w.Ontology.ExtractTriples(ctx, chatText)
+	contextHint := fmt.Sprintf("Memória de Chat - Sessão: %s", sessionID)
+	triples, err := w.Ontology.ExtractTriples(ctx, chatText, contextHint)
 	if err != nil {
 		return fmt.Errorf("falha ao extrair sinapses: %w", err)
 	}
 
 	if len(triples) == 0 {
-		return nil // Nada de relevante para aprender aqui
+		return nil
 	}
 
 	for _, t := range triples {
-		// 2. Gerar Embedding para o fato (para busca semântica futura)
 		factText := fmt.Sprintf("%s %s %s", t.Subject, t.Predicate, t.Object)
 		vector, _ := w.Embedder.GenerateEmbedding(ctx, factText)
 
-		// 3. Salvar no Qdrant (Coleção knowledge_graph)
-		// Geramos um ID determinístico baseado na tripla para evitar duplicatas exatas
+		// 2. DETECÇÃO DE CONFLITO: Busca se já sabemos algo sobre este (Sujeito, Predicado)
+		existing, _ := w.Qdrant.SearchByName("knowledge_graph", t.Subject)
+		if existing != nil && existing["predicate"] == t.Predicate && existing["object"] != t.Object && existing["status"] != "legacy" {
+			
+			// AGENTE VALIDADOR: Decidir se é uma atualização ou conflito duvidoso
+			resolution, err := w.Ontology.ValidateConflict(ctx, existing["object"].(string), t.Object, chatText)
+			
+			if err == nil && resolution == "UPDATE" {
+				// Marca o antigo como LEGADO (Conhecimento Morto)
+				oldID := uint64(existing["id"].(float64)) // ID original
+				w.Qdrant.SetPayload("knowledge_graph", oldID, map[string]interface{}{
+					"status": "legacy",
+					"archived_at": time.Now().Format(time.RFC3339),
+				})
+				runtime.EventsEmit(ctx, "agent:log", map[string]string{
+					"source":  "WEAVER",
+					"content": fmt.Sprintf("📜 Conhecimento Legado: '%s' foi superado por '%s'.", existing["object"], t.Object),
+				})
+			} else {
+				// CONFLITO TOTAL: Emite Alerta Vermelho para o Frontend com os dados completos para resolução
+				runtime.EventsEmit(ctx, "graph:conflict", map[string]interface{}{
+					"subject":    t.Subject,
+					"predicate":  t.Predicate,
+					"old":        existing["object"],
+					"new":        t.Object,
+					"old_id":     uint64(existing["id"].(float64)),
+					"session_id": sessionID,
+				})
+				continue // Não salva enquanto não houver certeza
+			}
+		}
+
+		// 3. Salvar Nova Sinapse
 		h := fnv.New64a()
-		h.Write([]byte(factText))
+		h.Write([]byte(factText + sessionID)) // ID único por sessão também
 		id := h.Sum64()
 
 		payload := map[string]interface{}{
-			"subject":   t.Subject,
-			"predicate": t.Predicate,
-			"object":    t.Object,
-			"source":    "chat_memory",
-			"timestamp": time.Now().Format(time.RFC3339),
-			"content":   factText,
+			"id":         id,
+			"session_id": sessionID,
+			"subject":    t.Subject,
+			"predicate":  t.Predicate,
+			"object":     t.Object,
+			"source":     "chat_memory",
+			"status":     "active",
+			"timestamp":  time.Now().Format(time.RFC3339),
+			"content":    factText,
 		}
 
-		err := w.Qdrant.UpsertPoint("knowledge_graph", id, vector, payload)
-		if err != nil {
-			fmt.Printf("[KnowledgeWeaver] Erro ao salvar sinapse: %v\n", err)
-			continue
-		}
-		
-		fmt.Printf("[KnowledgeWeaver] Sinapse Criada: %s\n", factText)
+		w.Qdrant.UpsertPoint("knowledge_graph", id, vector, payload)
+
+		// 4. ATUALIZAÇÃO VISUAL
+		runtime.EventsEmit(ctx, "graph:node", map[string]string{
+			"id":            t.Subject,
+			"name":          t.Subject,
+			"document-type": "memory",
+			"session-id":    sessionID,
+		})
+		runtime.EventsEmit(ctx, "graph:node", map[string]string{
+			"id":            t.Object,
+			"name":          t.Object,
+			"document-type": "memory",
+			"session-id":    sessionID,
+		})
+		runtime.EventsEmit(ctx, "graph:edge", map[string]string{
+			"source": t.Subject,
+			"target": t.Object,
+		})
 	}
 
 	return nil

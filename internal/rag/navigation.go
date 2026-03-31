@@ -3,7 +3,6 @@ package rag
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -11,113 +10,119 @@ import (
 	"Lumaestro/internal/provider"
 )
 
-// GraphNavigator gerencia a expansão de contexto baseada em links.
+// GraphNavigator gerencia a expansão de contexto baseada em links com suporte a Destaque Visual.
 type GraphNavigator struct {
 	Qdrant *provider.QdrantClient
 }
 
-// NewGraphNavigator inicializa o navegador com acesso à memória semântica.
+// NewGraphNavigator inicializa o navegador com foco em Trajetória Semântica.
 func NewGraphNavigator(qdrant *provider.QdrantClient) *GraphNavigator {
 	return &GraphNavigator{Qdrant: qdrant}
 }
 
-// ExpandContext busca as notas vizinhas de forma recursiva (com controle de depth e size).
+// ExpandContext realiza uma travessia inteligente e emite a "Trilha de Raciocínio" para o frontend.
 func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[string]interface{}) []string {
 	var fullContext []string
 	visited := make(map[string]bool)
+	visitedIds := make(map[uint64]bool)
 
-	// Carregar Limites Essenciais de Configuração
-	cfg, err := config.Load()
+	cfg, _ := config.Load()
 	depthLimit := 1
+	neighborLimit := 5
 	contextLimit := 4000
-	if err == nil && cfg != nil {
-		if cfg.GraphDepth > 0 {
-			depthLimit = cfg.GraphDepth
-		}
-		if cfg.GraphContextLimit > 0 {
-			contextLimit = cfg.GraphContextLimit
-		}
+	if cfg != nil {
+		if cfg.GraphDepth > 0 { depthLimit = cfg.GraphDepth }
+		if cfg.GraphNeighborLimit > 0 { neighborLimit = cfg.GraphNeighborLimit }
+		if cfg.GraphContextLimit > 0 { contextLimit = cfg.GraphContextLimit }
 	}
 
 	totalChars := 0
-
-	// 🧠 Fila para BFS (Breadth-First Search) no RAG
-	type node struct {
-		data  map[string]interface{}
-		depth int
-	}
-
-	var queue []node
+	
+	// 🚀 FASE 1: Processar Núcleos (Depth 0)
 	for _, note := range initialNotes {
-		queue = append(queue, node{data: note, depth: 0})
+		name, _ := note["name"].(string)
+		if id, ok := note["id"].(float64); ok {
+			visitedIds[uint64(id)] = true
+		}
+		
+		if name != "" {
+			visited[name] = true
+			content, _ := note["content"].(string)
+			fullContext = append(fullContext, fmt.Sprintf("=== [NÚCLEO]: %s ===\n%s", name, content))
+			totalChars += len(content)
+			
+			// Efeito: Acende o nó mestre
+			runtime.EventsEmit(ctx, "node:active", name)
+		}
 	}
 
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-
-		title, _ := current.data["name"].(string)
-		if visited[title] || title == "" {
-			continue
-		}
-		visited[title] = true
+	// 🚀 FASE 2: Expansão de Vizinhança (N-Hop) com Batch Fetch
+	if depthLimit > 0 {
+		var neighborsToFetch []uint64
 		
-		// Evento Visual: Acende o nó brilhantemente ao iniciar sua leitura formal
-		runtime.EventsEmit(ctx, "node:active", title)
-		time.Sleep(300 * time.Millisecond) // DELAY CINEMÁTICO UX 🎬
-
-		content, _ := current.data["content"].(string)
-
-		// Tracker de Contexto: Evitar explosão de tokens que causam lentidão e custo
-		if totalChars+len(content) > contextLimit && totalChars > 0 {
-			fullContext = append(fullContext, fmt.Sprintf("[LIMITE EXCEDIDO] Vizinhos ou partes da rede foram omitidos para preservar seu foco e custo."))
-			break
+		for _, note := range initialNotes {
+			if links, ok := note["links"].([]interface{}); ok {
+				for _, link := range links {
+					if len(neighborsToFetch) >= neighborLimit {
+						break
+					}
+					id := uint64(link.(float64))
+					if !visitedIds[id] {
+						neighborsToFetch = append(neighborsToFetch, id)
+						visitedIds[id] = true
+					}
+				}
+			}
+			if len(neighborsToFetch) >= neighborLimit {
+				break
+			}
 		}
 
-		totalChars += len(content)
-		fullContext = append(fullContext, fmt.Sprintf("=== Nota: %s ===\n%s", title, content))
+		if len(neighborsToFetch) > 0 {
+			// Busca em lote inspirada na TrustGraph
+			neighbors, err := n.Qdrant.GetPoints("obsidian_knowledge", neighborsToFetch)
+			if err == nil {
+				for _, nb := range neighbors {
+					name, _ := nb["name"].(string)
+					content, _ := nb["content"].(string)
+					
+					if totalChars + len(content) > contextLimit {
+						break
+					}
 
-		// 🧱 Expansão Baseada no Grafo (Links do Obsidian)
-		if current.depth < depthLimit {
-			if linksRaw, ok := current.data["links"].([]interface{}); ok {
-				for _, linkRaw := range linksRaw {
-					if linkName, ok := linkRaw.(string); ok {
-						if !visited[linkName] {
-							// Buscamos a nota conectada de forma cirúrgica na Collection do Qdrant
-							neighborData, err := n.Qdrant.SearchByName("obsidian_knowledge", linkName)
-							if err == nil && neighborData != nil {
-								// Avisa Frontend das Viagens Visuais
-								runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] 🔗 seguindo link → %s", time.Now().Format("15:04"), linkName))
-								runtime.EventsEmit(ctx, "graph:edge", map[string]string{"source": title, "target": linkName})
-								runtime.EventsEmit(ctx, "graph:node", map[string]string{"id": linkName, "name": linkName})
+					fullContext = append(fullContext, fmt.Sprintf("=== [CONTEXTO_RELACIONADO]: %s ===\n%s", name, content))
+					totalChars += len(content)
 
-								// Adiciona o vizinho à fila para próxima iteração
-								queue = append(queue, node{data: neighborData, depth: current.depth + 1})
+					// ✨ VISUAL: Cria a "Trilha de Contexto" no Grafo
+					// No backend não sabemos todos os nomes das arestas, então emitimos o highlight por par.
+					for _, note := range initialNotes {
+						parentName, _ := note["name"].(string)
+						// Se o vizinho veio deste pai, destaca o link
+						if links, ok := note["links"].([]interface{}); ok {
+							for _, l := range links {
+								if uint64(l.(float64)) == uint64(nb["id"].(float64)) {
+									runtime.EventsEmit(ctx, "graph:highlight", map[string]string{
+										"source": parentName,
+										"target": name,
+									})
+								}
 							}
 						}
 					}
 				}
 			}
 		}
+	}
 
-		// ⚡ Navegação de Sinapses Mistas (Ontologia Extrapolada)
-		if current.depth == 0 { // Triplas são focadas no núcleo para não gerar devaneios e "alucinação mista"
-			synapses, err := n.Qdrant.Search("knowledge_graph", nil, 3) // Simulado: Buscando por similaridade nula temporariamente
-			if err == nil {
-				for _, syn := range synapses {
-					subj, _ := syn["subject"].(string)
-					obj, _ := syn["object"].(string)
-					
-					if subj == title || obj == title {
-						fact, _ := syn["content"].(string)
-						synapseStr := fmt.Sprintf("[SINAPSE APRENDIDA]: %s", fact)
-						
-						if totalChars+len(synapseStr) < contextLimit {
-							fullContext = append(fullContext, synapseStr)
-							totalChars += len(synapseStr)
-						}
-					}
-				}
+	// 🚀 FASE 3: Sinapses de Chat (Memória Longa)
+	// (Mantido o padrão de busca de memórias conectadas)
+	synapses, err := n.Qdrant.Search("knowledge_graph", nil, 5) 
+	if err == nil {
+		for _, syn := range synapses {
+			fact, _ := syn["content"].(string)
+			if totalChars + len(fact) < contextLimit {
+				fullContext = append(fullContext, fmt.Sprintf("[SINAPSE]: %s", fact))
+				totalChars += len(fact)
 			}
 		}
 	}

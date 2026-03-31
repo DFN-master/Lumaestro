@@ -13,6 +13,9 @@ const config = ref({
   active_agent: 'gemini',
   auto_start_agents: [],
   agent_language: 'Português do Brasil',
+  graph_depth: 1,
+  graph_neighbor_limit: 5,
+  graph_context_limit: 4000,
   security: {
     allow_read: false,
     allow_write: false,
@@ -229,6 +232,15 @@ const activeTab = ref('geral')
             <input v-model="config.obsidian_vault_path" type="text" class="premium-input" placeholder="C:\Users\...\Obsidian" />
             <div class="input-glow"></div>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label>Alcance da Teia (Vizinhos por Nó): <span class="val-highlight">{{ config.graph_neighbor_limit }}</span></label>
+          <div class="input-wrapper range-wrapper">
+            <input v-model.number="config.graph_neighbor_limit" type="range" min="1" max="25" step="1" class="premium-range" />
+            <div class="range-track"></div>
+          </div>
+          <p class="desc-small">Define quantos vizinhos o Maestro deve buscar para cada nota encontrada no RAG.</p>
         </div>
 
         <div class="form-group">
@@ -578,6 +590,48 @@ label {
   font-size: 1rem;
   border-radius: 12px;
   font-family: inherit;
+  background: rgba(2, 6, 23, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  transition: all 0.3s;
+}
+
+.val-highlight {
+  color: var(--primary);
+  font-weight: 800;
+  margin-left: 10px;
+}
+
+.desc-small {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-top: 5px;
+}
+
+.premium-range {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+}
+
+.premium-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--primary);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 10px var(--primary-glow);
+  transition: all 0.2s;
+}
+
+.premium-range::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 20px var(--primary-glow);
 }
 
 .input-glow {

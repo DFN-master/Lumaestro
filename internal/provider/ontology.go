@@ -41,16 +41,22 @@ func NewOntologyService(client *genai.Client) *OntologyService {
 	return &OntologyService{GenAI: client}
 }
 
-// ExtractTriples extrai fatos estruturados de um texto usando o prompt TrustGraph.
-func (s *OntologyService) ExtractTriples(ctx context.Context, text string) ([]Triple, error) {
-	prompt := `Você é um especialista em extração de conhecimento estruturado (triplas).
-Extraia triplas semânticas do texto abaixo no formato JSON.
+// ExtractTriples extrai fatos estruturados de um texto usando o prompt TrustGraph, com suporte a desambiguação.
+func (s *OntologyService) ExtractTriples(ctx context.Context, text string, contextHint string) ([]Triple, error) {
+	prompt := fmt.Sprintf(`Extraia triplas semânticas (Sujeito-Predicado-Objeto) baseadas NO TEXTO ABAIXO.
+Retorne APENAS o JSON.
 
-## Classes: Person, Project, Task, Concept, Technology.
-## Relações: works_on, uses, defines, part_of, mentions.
+## DICA DE CONTEXTO GLOBAL:
+Use esta informação para resolver pronomes como "ele", "ela", "o projeto", "a empresa": 
+> %s
+
+## BLUEPRINT OBRIGATÓRIO:
+1. CLASSES: [Person, Project, Task, Concept, Technology, Milestone, Bug, Decision]
+2. RELAÇÕES: [is_part_of, works_on, uses, defines, explains, mentions, created, resolved, depends_on]
+3. REGRA: Use apenas os termos acima. Atomize os fatos.
 
 Texto:
-` + text
+` + text, contextHint)
 
 	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
 	if err != nil {
@@ -61,6 +67,35 @@ Texto:
 		return parseTriples(fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0]))
 	}
 	return nil, nil
+}
+
+// ValidateConflict atua como o "Agente da Verdade", decidindo entre informações contraditórias.
+func (s *OntologyService) ValidateConflict(ctx context.Context, oldFact, newFact, contextStr string) (string, error) {
+	prompt := fmt.Sprintf(`Você é o Agente Validador de Verdade do Lumaestro.
+Detectamos um conflito de informação no Grafo de Conhecimento.
+
+FATO ANTIGO: %s
+FATO NOVO: %s
+CONTEXTO RECENTE: %s
+
+Sua tarefa:
+Responda APENAS "UPDATE" se o Fato Novo for claramente uma atualização ou correção válida.
+Responda APENAS "CONFLICT" se houver dúvida real ou se as informações forem contraditórias sem uma justificativa clara.
+
+Decisão:`, oldFact, newFact, contextStr)
+
+	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
+	if err != nil {
+		return "CONFLICT", err
+	}
+
+	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
+		decision := strings.TrimSpace(fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0]))
+		if strings.Contains(decision, "UPDATE") {
+			return "UPDATE", nil
+		}
+	}
+	return "CONFLICT", nil
 }
 
 // ProcessMedia extrai conhecimento de arquivos visuais ou documentos (Imagens/PDFs).

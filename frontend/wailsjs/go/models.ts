@@ -64,6 +64,7 @@ export namespace config {
 	    auto_start_agents: string[];
 	    agent_language: string;
 	    graph_depth: number;
+	    graph_neighbor_limit: number;
 	    graph_context_limit: number;
 	    security: SecurityConfig;
 	
@@ -83,6 +84,7 @@ export namespace config {
 	        this.auto_start_agents = source["auto_start_agents"];
 	        this.agent_language = source["agent_language"];
 	        this.graph_depth = source["graph_depth"];
+	        this.graph_neighbor_limit = source["graph_neighbor_limit"];
 	        this.graph_context_limit = source["graph_context_limit"];
 	        this.security = this.convertValues(source["security"], SecurityConfig);
 	    }

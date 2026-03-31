@@ -6,6 +6,10 @@ export function AddMCPServer(arg1, arg2) {
   return window['go']['main']['App']['AddMCPServer'](arg1, arg2);
 }
 
+export function AnalyzeGraphHealth() {
+  return window['go']['main']['App']['AnalyzeGraphHealth']();
+}
+
 export function AskAgent(arg1, arg2) {
   return window['go']['main']['App']['AskAgent'](arg1, arg2);
 }
@@ -14,8 +18,8 @@ export function CheckConnection() {
   return window['go']['main']['App']['CheckConnection']();
 }
 
-export function ConsolidateChatKnowledge(arg1) {
-  return window['go']['main']['App']['ConsolidateChatKnowledge'](arg1);
+export function ConsolidateChatKnowledge(arg1, arg2) {
+  return window['go']['main']['App']['ConsolidateChatKnowledge'](arg1, arg2);
 }
 
 export function FixEnvironment() {
@@ -28,6 +32,10 @@ export function GenerateGeminiMD() {
 
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
+}
+
+export function GetProjectDoc(arg1) {
+  return window['go']['main']['App']['GetProjectDoc'](arg1);
 }
 
 export function GetToolsStatus() {
@@ -54,8 +62,16 @@ export function NewAgentSession(arg1) {
   return window['go']['main']['App']['NewAgentSession'](arg1);
 }
 
+export function OpenFileInEditor(arg1) {
+  return window['go']['main']['App']['OpenFileInEditor'](arg1);
+}
+
 export function ResizeTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
+}
+
+export function ResolveConflict(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['ResolveConflict'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function SaveConfig(arg1) {

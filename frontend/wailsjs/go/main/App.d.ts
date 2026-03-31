@@ -5,17 +5,21 @@ import {agents} from '../models';
 
 export function AddMCPServer(arg1:string,arg2:string):Promise<string>;
 
+export function AnalyzeGraphHealth():Promise<Record<string, any>>;
+
 export function AskAgent(arg1:string,arg2:string):Promise<string>;
 
 export function CheckConnection():Promise<boolean>;
 
-export function ConsolidateChatKnowledge(arg1:string):Promise<string>;
+export function ConsolidateChatKnowledge(arg1:string,arg2:string):Promise<string>;
 
 export function FixEnvironment():Promise<string>;
 
 export function GenerateGeminiMD():Promise<string>;
 
 export function GetConfig():Promise<config.Config>;
+
+export function GetProjectDoc(arg1:string):Promise<string>;
 
 export function GetToolsStatus():Promise<Record<string, boolean>>;
 
@@ -29,7 +33,11 @@ export function LoadAgentSession(arg1:string,arg2:string):Promise<void>;
 
 export function NewAgentSession(arg1:string):Promise<void>;
 
+export function OpenFileInEditor(arg1:string):Promise<void>;
+
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
+
+export function ResolveConflict(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string,arg6:string):Promise<string>;
 
 export function SaveConfig(arg1:config.Config):Promise<string>;
 
@@ -37,7 +45,7 @@ export function ScanVault():Promise<string>;
 
 export function SendAgentInput(arg1:string,arg2:string,arg3:Array<Record<string, string>>):Promise<void>;
 
-export function SendTerminalData(arg1:string,arg2:string):Promise<string>;
+export function SendTerminalData(arg1:string,arg2:string):Promise<void>;
 
 export function SetAutonomousMode(arg1:boolean):Promise<string>;
 

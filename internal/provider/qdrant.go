@@ -17,6 +17,32 @@ func NewQdrantClient(url string) *QdrantClient {
 	return &QdrantClient{BaseURL: url}
 }
 
+// SetPayload atualiza metadados (payload) de um ponto existente sem sobrescrever o vetor.
+func (c *QdrantClient) SetPayload(collection string, id uint64, payload map[string]interface{}) error {
+	url := fmt.Sprintf("%s/collections/%s/points/payload?wait=true", c.BaseURL, collection)
+
+	data := map[string]interface{}{
+		"payload": payload,
+		"points":  []uint64{id},
+	}
+
+	body, _ := json.Marshal(data)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
+}
+
 // UpsertPoint envia uma nota (vetor + metadados) para o Qdrant.
 func (c *QdrantClient) UpsertPoint(collection string, id uint64, vector []float32, payload map[string]interface{}) error {
 	url := fmt.Sprintf("%s/collections/%s/points?wait=true", c.BaseURL, collection)
@@ -159,6 +185,40 @@ func (c *QdrantClient) SearchWithScores(collection string, vector []float32, lim
 		entry := r.Payload
 		entry["_score"] = r.Score
 		outputs = append(outputs, entry)
+	}
+
+	return outputs, nil
+}
+
+// GetPoints recupera múltiplos pontos específicos por ID.
+func (c *QdrantClient) GetPoints(collection string, ids []uint64) ([]map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/collections/%s/points", c.BaseURL, collection)
+
+	query := map[string]interface{}{
+		"ids":          ids,
+		"with_payload": true,
+	}
+
+	body, _ := json.Marshal(query)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Result []struct {
+			Payload map[string]interface{} `json:"payload"`
+		} `json:"result"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	outputs := make([]map[string]interface{}, 0)
+	for _, r := range result.Result {
+		outputs = append(outputs, r.Payload)
 	}
 
 	return outputs, nil

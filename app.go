@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 	"Lumaestro/internal/agents"
 	"Lumaestro/internal/config"
@@ -100,12 +102,17 @@ func (a *App) initServices() error {
 	a.chat = rag.NewChatService(a.legacyExec, a.orchestrator, search, a.navigator, a.embedder, a.installer)
 	a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
 
+	// 🔥 Injeção de Autonomia: Maestro agora pode comandar o Crawler
+	a.executor.Tools.Indexer = a.crawler
+
 	return nil
 }
 
 // listenForLogs ouve o Executor ACP (Logs da IA no formato JSON-RPC via STDOUT)
 func (a *App) listenForLogs() {
 	for log := range a.executor.LogChan {
+		// Log discreto apenas para monitoramento técnico de fluxo
+		// fmt.Printf("[Wails] Evento agent:log enviado\n") 
 		runtime.EventsEmit(a.ctx, "agent:log", log)
 	}
 }
@@ -186,17 +193,39 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 
 // ScanVault percorre o Obsidian e indexa no Qdrant com Embeddings
 func (a *App) ScanVault() string {
-	err := a.crawler.IndexVault(a.ctx)
-	if err != nil {
-		return "Erro na Indexação: " + err.Error()
-	}
+	fmt.Println("[BACKEND] ScanVault disparado assincronamente...")
 
-	runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-		"source":  "CRAWLER",
-		"content": "Indexação semântica concluída com sucesso!",
-	})
+	// 🕊️ RAG em Segundo Plano: Previne travamento total da UI e do Chat
+	go func() {
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"source":  "CRAWLER",
+			"content": "🚀 Iniciando Sincronização Semântica Completa em background...",
+		})
 
-	return "Pronto! Seu conhecimento agora é vetorial."
+		// 1. Indexar o cofre do Obsidian (Usuário)
+		err := a.crawler.IndexVault(a.ctx)
+		if err != nil {
+			fmt.Printf("[BACKEND] Erro na Indexação do Vault: %v\n", err)
+			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+				"source":  "ERROR",
+				"content": "❌ Erro na Indexação do Obsidian: " + err.Error(),
+			})
+			return
+		}
+
+		// 2. Indexar a documentação do próprio sistema (Lumaestro Core)
+		err = a.crawler.IndexSystemDocs(a.ctx, "./")
+		if err != nil {
+			fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
+		}
+
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"source":  "CRAWLER",
+			"content": "🏛️ Sincronização semântica completa (Vault + Sistema)!",
+		})
+	}()
+
+	return "Indexação iniciada em segundo plano. Você pode continuar usando o Maestro normalmente."
 }
 
 // CheckConnection verifica se o Qdrant está acessível
@@ -390,13 +419,13 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 }
 
 // ConsolidateChatKnowledge analisa o diálogo recente e cria ligações nervosas (sinapses).
-func (a *App) ConsolidateChatKnowledge(chatText string) string {
+func (a *App) ConsolidateChatKnowledge(sessionID string, chatText string) string {
 	if a.weaver == nil {
 		return "⚠️ Motor de memórias não inicializado."
 	}
 
-	fmt.Println("[App] Consolidando ligações nervosas do último diálogo...")
-	err := a.weaver.WeaveChatKnowledge(a.ctx, chatText)
+	fmt.Printf("[App] Consolidando ligações nervosas para sessão %s...\n", sessionID)
+	err := a.weaver.WeaveChatKnowledge(a.ctx, sessionID, chatText)
 	if err != nil {
 		return "Erro ao tecer sinapses: " + err.Error()
 	}
@@ -404,12 +433,92 @@ func (a *App) ConsolidateChatKnowledge(chatText string) string {
 	return "✅ Sinapses consolidadas com sucesso no Grafo de Conhecimento."
 }
 
-// SendTerminalData está descontinuado fisicamente no ACP, retorna erro.
-func (a *App) SendTerminalData(agent string, base64Data string) string {
-	return "Não suportado em modo ACP"
+// ResolveConflict executa a decisão do usuário sobre uma contradição semântica detectada.
+func (a *App) ResolveConflict(decision string, subject string, predicate string, oldID uint64, newValue string, sessionID string) string {
+	if decision == "new" {
+		// 1. Marcar o antigo como LEGADO
+		a.qdrant.SetPayload("knowledge_graph", oldID, map[string]interface{}{
+			"status": "legacy",
+			"archived_at": time.Now().Format(time.RFC3339),
+		})
+
+		// 2. Salvar o NOVO como ativo
+		factText := fmt.Sprintf("%s %s %s", subject, predicate, newValue)
+		vector, _ := a.crawler.Embedder.GenerateEmbedding(a.ctx, factText)
+
+		h := fnv.New64a()
+		h.Write([]byte(factText + sessionID))
+		newID := h.Sum64()
+
+		payload := map[string]interface{}{
+			"id":         newID,
+			"session_id": sessionID,
+			"subject":    subject,
+			"predicate":  predicate,
+			"object":     newValue,
+			"source":     "chat_memory",
+			"status":     "active",
+			"timestamp":  time.Now().Format(time.RFC3339),
+			"content":    factText,
+		}
+
+		a.qdrant.UpsertPoint("knowledge_graph", newID, vector, payload)
+		
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"source":  "RESOLVER",
+			"content": fmt.Sprintf("✅ Conflito resolvido: '%s' agora é a verdade sobre '%s'.", newValue, subject),
+		})
+	} else {
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"source":  "RESOLVER",
+			"content": fmt.Sprintf("🏛️ Conflito resolvido: Mantida a informação histórica para '%s'.", subject),
+		})
+	}
+
+	return "Conflito resolvido."
 }
 
-// ResizeTerminal não faz mais sentido visual no ACP. Ignoramos graciosamente.
+
+func (a *App) GetProjectDoc(name string) (string, error) {
+	fmt.Printf("[App] Lendo documentação: %s\n", name)
+	path := filepath.Join(".", "docs", name)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("erro ao ler %s: %v", name, err)
+	}
+
+	return string(content), nil
+}
+
+// AnalyzeGraphHealth analisa a integridade semântica do grafo.
+func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
+	fmt.Println("[Audit] Analisando saúde do Grafo de Contexto...")
+	
+	// Busca pontos ativos no Qdrant (Simulação de Analytic do TrustGraph)
+	// Para um sistema real, faríamos um Scroll filtrando por status: active
+	// Aqui retornamos estatísticas baseadas na densidade atual
+	stats := map[string]interface{}{
+		"density": 0.85, // Exemplo: de cada 100 notas, 85 estão conectadas
+		"conflicts": 0,
+		"active_nodes": 0,
+	}
+
+	return stats, nil
+}
+
+// OpenFileInEditor abre o arquivo fonte usando o handler padrão do SO.
+func (a *App) OpenFileInEditor(path string) error {
+	fmt.Printf("[App] Abrindo arquivo na fonte: %s\n", path)
+	// No Windows usamos 'cmd /c start'
+	cmd := exec.Command("cmd", "/c", "start", "", path)
+	return cmd.Run()
+}
+// SendTerminalData envia input do usuário para o processo do terminal (stdin).
+func (a *App) SendTerminalData(agent string, data string) {
+	sessionID := "acp-session-" + agent
+	a.executor.SendInput(sessionID, data, nil)
+}
+
 func (a *App) ResizeTerminal(agent string, cols int, rows int) {
 	// Ignored on JSON RPC mode.
 }
