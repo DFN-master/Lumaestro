@@ -1,3 +1,9 @@
 build/bin
 node_modules
 frontend/dist
+
+# Gemini / Agentes
+.gemini/
+gemini-telemetry.json
+*-telemetry.json
+acp-test-script.*
