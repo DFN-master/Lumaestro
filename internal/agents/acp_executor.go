@@ -525,12 +525,16 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 
 // HandleRequest lida com os pedidos de ferramenta (hands) da IA.
 func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json.RawMessage) {
+	fmt.Printf("[ACP DEBUG] Método Recebido: %s\n", method)
+	// Normalização do método para compatibilidade entre dialetos
+	normMethod := strings.ToLower(strings.TrimPrefix(method, "client/"))
+
 	var result interface{}
 	var rpcErr *RPCError
 	reviewID := fmt.Sprintf("rev-%v", id)
 
-	switch method {
-	case "client/readFile":
+	switch normMethod {
+	case "readfile", "read_file":
 		var p struct {
 			Path string `json:"path"`
 		}
@@ -548,19 +552,36 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			}
 		}
 
-	case "client/writeFile":
+	case "writefile", "write_file":
 		var p struct {
 			Path    string `json:"path"`
 			Content string `json:"content"`
 		}
 		if json.Unmarshal(params, &p) == nil {
 			cfg, _ := config.Load()
-			if cfg.Security.AllowWrite {
+			
+			// Verifica se o arquivo já existe para decidir se é uma 'Escrita' ou 'Criação'
+			fileExists := false
+			if _, err := os.Stat(p.Path); err == nil {
+				fileExists = true
+			}
+
+			canAct := false
+			if fileExists {
+				canAct = cfg.Security.AllowWrite
+			} else {
+				canAct = cfg.Security.AllowCreate
+			}
+
+			if canAct {
 				// Se for um arquivo crítico ou se Acesso Global estiver desligado, pedir review
 				needsReview := !cfg.Security.FullMachineAccess || strings.HasSuffix(p.Path, ".go") || strings.HasSuffix(p.Path, ".json")
 				
 				if needsReview {
-					if h.Executor.RequestReview(reviewID, "ESCREVER ARQUIVO", p.Path) {
+					actionLabel := "ESCREVER ARQUIVO"
+					if !fileExists { actionLabel = "CRIAR ARQUIVO" }
+
+					if h.Executor.RequestReview(reviewID, actionLabel, p.Path) {
 						err := h.Executor.Proxy.WriteFile(p.Path, p.Content)
 						if err == nil {
 							result = map[string]bool{"success": true}
@@ -568,10 +589,10 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 							rpcErr = &RPCError{Code: -32001, Message: err.Error()}
 						}
 					} else {
-						rpcErr = &RPCError{Code: 403, Message: "Escrita recusada pelo usuário."}
+						rpcErr = &RPCError{Code: 403, Message: "Ação recusada pelo usuário."}
 					}
 				} else {
-					// Escrita direta para arquivos não-críticos (.txt, .md, etc)
+					// Ação direta para arquivos não-críticos (.txt, .md, etc)
 					err := h.Executor.Proxy.WriteFile(p.Path, p.Content)
 					if err == nil {
 						result = map[string]bool{"success": true}
@@ -580,11 +601,13 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 					}
 				}
 			} else {
-				rpcErr = &RPCError{Code: 403, Message: "🛡️ ESCRITA BLOQUEADA: Ative 'Permitir Escrita' nas configurações."}
+				msg := "🛡️ ESCRITA BLOQUEADA: Ative 'Permitir Escrita'"
+				if !fileExists { msg = "🛡️ CRIAÇÃO BLOQUEADA: Ative 'Permitir Criação' nas configurações." }
+				rpcErr = &RPCError{Code: 403, Message: msg}
 			}
 		}
 
-	case "client/deleteFile":
+	case "deletefile", "delete_file":
 		var p struct {
 			Path string `json:"path"`
 		}
@@ -606,7 +629,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			}
 		}
 
-	case "client/moveFile":
+	case "movefile", "move_file":
 		var p struct {
 			OldPath string `json:"oldPath"`
 			NewPath string `json:"newPath"`
@@ -630,7 +653,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			}
 		}
 
-	case "client/runCommand":
+	case "runcommand", "run_command", "run_shell_command":
 		var p struct {
 			Command string   `json:"command"`
 			Args    []string `json:"args"`
@@ -639,11 +662,16 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 			cfg, _ := config.Load()
 			if cfg.Security.AllowRunCommands {
 				details := fmt.Sprintf("%s %s", p.Command, strings.Join(p.Args, " "))
-				// Comandos sempre pedem review por segurança extrema, a menos que mude no futuro
+				// Comandos sempre pedem review por segurança extrema
 				if h.Executor.RequestReview(reviewID, "EXECUTAR COMANDO", details) {
 					output, err := h.Executor.Proxy.RunCommand(p.Command, p.Args)
 					if err == nil {
-						result = map[string]string{"output": output}
+						// 🛠️ FORMATO ACP OFICIAL: Lista de Conteúdo
+						result = map[string]interface{}{
+							"content": []map[string]interface{}{
+								{"type": "text", "text": output},
+							},
+						}
 					} else {
 						rpcErr = &RPCError{Code: -32004, Message: err.Error()}
 					}
@@ -651,7 +679,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 					rpcErr = &RPCError{Code: 403, Message: "Execução rejeitada pelo usuário"}
 				}
 			} else {
-				rpcErr = &RPCError{Code: 403, Message: "🛡️ EXECUÇÃO BLOQUEADA: Ative 'Executar Comandos'."}
+				rpcErr = &RPCError{Code: 403, Message: "🛡️ EXECUÇÃO BLOQUEADA: Ative 'Executar Comandos' nas configurações."}
 			}
 		}
 

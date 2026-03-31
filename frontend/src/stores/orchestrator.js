@@ -222,9 +222,16 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     }
   };
 
-  const sendInput = async (agent, text) => {
-    console.log(`[Store] Enviando Input ACP (${agent}): ${text}`);
-    messages.value.push({ role: 'user', text: text });
+  const sendInput = async (agent, text, images = []) => {
+    console.log(`[Store] Enviando Input ACP (${agent}): ${text} com ${images.length} imagens`);
+    
+    // Registra a mensagem no histórico local incluindo as imagens para o ChatLog renderizar
+    messages.value.push({ 
+      role: 'user', 
+      text: text,
+      images: images // Formato [{data, type}]
+    });
+    
     isThinking.value = true; // Feedback visual imediato
 
     // Timeout de segurança: se a IA hibernar por 25s, destravamos a UI
@@ -241,7 +248,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     }, 25000);
 
     try {
-      const resp = await safeCall('main', 'SendAgentInput', agent, text);
+      // 🛠️ SINCRONIZAÇÃO CRÍTICA: Agora enviamos 3 argumentos conforme o novo contrato Go
+      const resp = await safeCall('main', 'SendAgentInput', agent, text, images);
       return resp;
     } catch (err) {
       console.error('[Store] Erro ao enviar input:', err);

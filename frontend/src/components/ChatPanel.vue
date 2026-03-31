@@ -47,9 +47,10 @@ const sendChatMessage = async (payload) => {
     return
   }
 
-  // Envio Padrão
+  // Envio Padrão (Multimodal)
   const targetAgent = payload.agent || 'gemini'
   const isActMode = payload.mode === 'act'
+  const images = payload.images || [] // Captura as imagens do Ctrl+V
 
   if (isActMode) {
     // Garante que a sessão está ativa antes de enviar
@@ -58,10 +59,11 @@ const sendChatMessage = async (payload) => {
       // Pequeno delay para a sessão inicializar no backend
       await new Promise(r => setTimeout(r, 500))
     }
-    await orchestrator.sendInput(targetAgent, text)
+    // 🛠️ SINCRONIZAÇÃO: Enviando texto e imagens capturadas
+    await orchestrator.sendInput(targetAgent, text, images)
   } else {
-    // Modo CHAT (Legacy/RAG) - Sem PTY, apenas requisição direta
-    await orchestrator.ask(targetAgent, text)
+    // Modo CHAT (Legacy/RAG) - Agora também aceita contexto visual
+    await orchestrator.ask(targetAgent, text, images)
   }
 }
 
