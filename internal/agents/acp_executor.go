@@ -235,21 +235,27 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	cmd.Dir, _ = os.Getwd()
 	cmd.Env = os.Environ()
 
-	// 🚨 CRUCIAL: Injetar a chave da API do config.json no processo Node
-	// E forçar o uso da pasta .gemini local do projeto (portabilidade)
+	// 🚨 CRUCIAL: Injetar a pasta de sessão específica desta conta
 	cwd, _ := os.Getwd()
-	cmd.Env = append(cmd.Env, "GEMINI_CLI_HOME="+cwd)
+	sessionHome := cwd // Default
+	if cfg, errCfg := config.Load(); errCfg == nil {
+		for _, acc := range cfg.GeminiAccounts {
+			if acc.Active && acc.HomeDir != "" {
+				sessionHome = acc.HomeDir
+				break
+			}
+		}
+	}
+	cmd.Env = append(cmd.Env, "GEMINI_CLI_HOME="+sessionHome)
 
-	// Habilitar Telemetria para Diagnóstico (Igual ao script de sucesso)
+	// Habilitar Telemetria para Diagnóstico
 	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_ENABLED=true")
 	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_TARGET=local")
-	diagLog := filepath.Join(cwd, "gemini-telemetry.json")
+	diagLog := filepath.Join(sessionHome, "gemini-telemetry.json")
 	cmd.Env = append(cmd.Env, "GEMINI_TELEMETRY_OUTFILE="+diagLog)
 
 	if cfg, errCfg := config.Load(); errCfg == nil {
-		if agent == "gemini" && cfg.GeminiAPIKey != "" {
-			cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+cfg.GeminiAPIKey)
-		} else if agent == "claude" && cfg.ClaudeAPIKey != "" {
+		if agent == "claude" && cfg.ClaudeAPIKey != "" {
 			cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+cfg.ClaudeAPIKey)
 		}
 	}

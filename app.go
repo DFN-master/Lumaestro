@@ -591,3 +591,97 @@ func (a *App) ListMCPServers() string {
 	}
 	return string(output)
 }
+
+// AddGeminiAccount adiciona uma nova conta e prepara seu diretório de sessão
+func (a *App) AddGeminiAccount(name string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	cwd, _ := os.Getwd()
+	accountPath := filepath.Join(cwd, ".gemini_accounts", name)
+
+	// Cria o diretório de sessão se não existir
+	if err := os.MkdirAll(accountPath, 0755); err != nil {
+		return fmt.Errorf("falha ao criar pasta de conta: %w", err)
+	}
+
+	// Verifica se já existe na config
+	for i := range cfg.GeminiAccounts {
+		if cfg.GeminiAccounts[i].Name == name {
+			cfg.GeminiAccounts[i].HomeDir = accountPath
+			return config.Save(*cfg)
+		}
+	}
+
+	cfg.GeminiAccounts = append(cfg.GeminiAccounts, config.GeminiAccount{
+		Name:    name,
+		HomeDir: accountPath,
+		Active:  false,
+	})
+
+	return config.Save(*cfg)
+}
+
+// LoginGeminiAccount abre um terminal para realizar o login OAuth em uma conta específica
+func (a *App) LoginGeminiAccount(name string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	var targetDir string
+	for _, acc := range cfg.GeminiAccounts {
+		if acc.Name == name {
+			targetDir = acc.HomeDir
+			break
+		}
+	}
+
+	if targetDir == "" {
+		return fmt.Errorf("conta '%s' não encontrada ou sem diretório configurado", name)
+	}
+
+	// Comando para abrir o terminal com GEMINI_CLI_HOME isolado
+	binaryPath := "gemini"
+	if _, err := exec.LookPath("gemini"); err != nil {
+		cwd, _ := os.Getwd()
+		binaryPath = filepath.Join(cwd, "node_modules", ".bin", "gemini.cmd")
+	}
+
+	// Script para o PowerShell forçar o ambiente de sessão desta conta
+	script := fmt.Sprintf(`$env:GEMINI_CLI_HOME='%s'; $env:NO_BROWSER='true'; & '%s' login`, targetDir, binaryPath)
+	
+	fmt.Printf("[Maestro] 🔑 Iniciando fluxo de Login OAuth para: %s\n", name)
+	return exec.Command("cmd", "/c", "start", "powershell", "-NoExit", "-Command", script).Run()
+}
+
+// SwitchGeminiAccount alterna a conta ativa do Gemini e reinicia a sessão
+func (a *App) SwitchGeminiAccount(name string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i := range cfg.GeminiAccounts {
+		if cfg.GeminiAccounts[i].Name == name {
+			cfg.GeminiAccounts[i].Active = true
+			found = true
+		} else {
+			cfg.GeminiAccounts[i].Active = false
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("conta '%s' não encontrada", name)
+	}
+
+	if err := config.Save(*cfg); err != nil {
+		return err
+	}
+
+	fmt.Printf("[Maestro] 🔄 Trocando para sessão de login: %s\n", name)
+	return a.StartAgentSession("gemini")
+}

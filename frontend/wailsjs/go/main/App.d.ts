@@ -3,6 +3,8 @@
 import {config} from '../models';
 import {agents} from '../models';
 
+export function AddGeminiAccount(arg1:string):Promise<void>;
+
 export function AddMCPServer(arg1:string,arg2:string):Promise<string>;
 
 export function AnalyzeGraphHealth():Promise<Record<string, any>>;
@@ -31,6 +33,8 @@ export function ListMCPServers():Promise<string>;
 
 export function LoadAgentSession(arg1:string,arg2:string):Promise<void>;
 
+export function LoginGeminiAccount(arg1:string):Promise<void>;
+
 export function NewAgentSession(arg1:string):Promise<void>;
 
 export function OpenFileInEditor(arg1:string):Promise<void>;
@@ -58,3 +62,5 @@ export function StartLoginSession(arg1:string):Promise<string>;
 export function StopAgentSession(arg1:string):Promise<void>;
 
 export function SubmitReview(arg1:string,arg2:boolean):Promise<void>;
+
+export function SwitchGeminiAccount(arg1:string):Promise<void>;

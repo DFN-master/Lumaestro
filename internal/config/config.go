@@ -17,12 +17,21 @@ type SecurityConfig struct {
 	Workspaces       []string `json:"workspaces"`          // Lista de pastas autorizadas (Whitelist)
 }
 
+// GeminiAccount representa um perfil de login do Gemini
+type GeminiAccount struct {
+	Name      string `json:"name"`
+	HomeDir   string `json:"home_dir"` // Caminho da pasta de sessão (.gemini_accounts/nome)
+	Active    bool   `json:"active"`
+	Exhausted bool   `json:"exhausted"`
+}
+
 // Config representa as configurações globais do orquestrador.
 type Config struct {
 	ObsidianVaultPath string         `json:"obsidian_vault_path"`
 	QdrantURL         string         `json:"qdrant_url"`
-	GeminiAPIKey      string         `json:"gemini_api_key"`
+	GeminiAPIKey      string         `json:"gemini_api_key"` // Legado (Manter para migração)
 	UseGeminiAPIKey   bool           `json:"use_gemini_api_key"`
+	GeminiAccounts    []GeminiAccount `json:"gemini_accounts"` // 🌟 Nova lista de contas
 	ClaudeAPIKey      string         `json:"claude_api_key"`
 	UseClaudeAPIKey   bool           `json:"use_claude_api_key"`
 	ActiveAgent       string         `json:"active_agent"`

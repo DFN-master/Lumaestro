@@ -53,11 +53,30 @@ export namespace config {
 	        this.workspaces = source["workspaces"];
 	    }
 	}
+	export class GeminiAccount {
+	    name: string;
+	    home_dir: string;
+	    active: boolean;
+	    exhausted: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new GeminiAccount(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.home_dir = source["home_dir"];
+	        this.active = source["active"];
+	        this.exhausted = source["exhausted"];
+	    }
+	}
 	export class Config {
 	    obsidian_vault_path: string;
 	    qdrant_url: string;
 	    gemini_api_key: string;
 	    use_gemini_api_key: boolean;
+	    gemini_accounts: GeminiAccount[];
 	    claude_api_key: string;
 	    use_claude_api_key: boolean;
 	    active_agent: string;
@@ -78,6 +97,7 @@ export namespace config {
 	        this.qdrant_url = source["qdrant_url"];
 	        this.gemini_api_key = source["gemini_api_key"];
 	        this.use_gemini_api_key = source["use_gemini_api_key"];
+	        this.gemini_accounts = this.convertValues(source["gemini_accounts"], GeminiAccount);
 	        this.claude_api_key = source["claude_api_key"];
 	        this.use_claude_api_key = source["use_claude_api_key"];
 	        this.active_agent = source["active_agent"];
@@ -107,6 +127,7 @@ export namespace config {
 		    return a;
 		}
 	}
+	
 
 }
 
