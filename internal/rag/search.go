@@ -5,16 +5,21 @@ import (
 	"sort"
 
 	"Lumaestro/internal/provider"
+	"Lumaestro/internal/rag/neural"
 )
 
 // SearchService gerencia a recuperação de conhecimento inteligente (Vítreo/Gráfico).
 type SearchService struct {
 	Qdrant *provider.QdrantClient
+	Ranker *neural.Ranker
 }
 
-// NewSearchService inicializa o buscador avançado.
-func NewSearchService(qdrant *provider.QdrantClient) *SearchService {
-	return &SearchService{Qdrant: qdrant}
+// NewSearchService inicializa o buscador avançado com suporte a Re-Ranking Neural.
+func NewSearchService(qdrant *provider.QdrantClient, ranker *neural.Ranker) *SearchService {
+	return &SearchService{
+		Qdrant: qdrant,
+		Ranker: ranker,
+	}
 }
 
 // SearchNote realiza uma busca híbrida em múltiplas coleções (Arquivos + Memórias) e aplica Re-Ranking.
@@ -62,8 +67,13 @@ func (s *SearchService) SearchNote(ctx context.Context, vector []float32, limit 
 			}
 
 			finalScore := vecScore + graphScore
-			res["_hybrid_score"] = finalScore
-			ranked = append(ranked, RankedNode{Payload: res, Score: finalScore})
+			
+			// 🧠 RE-RANKING NEURAL: O clique do usuário agora decide a vitória!
+			nodeName, _ := res["name"].(string)
+			neuralScore := float64(s.Ranker.AdjustScore(nodeName, float32(finalScore)))
+
+			res["_hybrid_score"] = neuralScore // Atualiza para o score final (Vetor + Grafo + Neural)
+			ranked = append(ranked, RankedNode{Payload: res, Score: neuralScore})
 		}
 	}
 

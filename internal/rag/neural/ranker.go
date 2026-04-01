@@ -14,6 +14,7 @@ type WeightRegistry struct {
 	Weights      map[string]float32 `json:"weights"`       // ID do No -> Peso Neural
 	Exploration  bool               `json:"exploration"`   // Se true, ignora os pesos (Modo Exploração)
 	LearningRate float32            `json:"learning_rate"` // Taxa de ajuste (eta)
+	DecayRate    float32            `json:"decay_rate"`    // Taxa de esquecimento (0.01 = 1%)
 }
 
 // Ranker gerencia o ciclo de vida do aprendizado ativo.
@@ -56,6 +57,9 @@ func (r *Ranker) load() {
 	}
 	if r.registry.LearningRate == 0 {
 		r.registry.LearningRate = 0.05
+	}
+	if r.registry.DecayRate == 0 {
+		r.registry.DecayRate = 0.01 // 1% padrão
 	}
 }
 
@@ -104,8 +108,9 @@ func (r *Ranker) AdjustScore(nodeID string, originalScore float32) float32 {
 	}
 
 	// Combinação Neural: O peso aprendido escala o score original
-	// Usamos log para evitar explosão de escala
-	multiplier := float32(math.Log1p(float64(weight)))
+	// Usamos Raiz Quadrada (Sqrt) para um reforço perceptível e orgânico.
+	// 1.0 -> 1.0x | 4.0 -> 2.0x | 9.0 -> 3.0x | 10.0 -> 3.16x
+	multiplier := float32(math.Sqrt(float64(weight)))
 	return originalScore * multiplier
 }
 
@@ -133,4 +138,27 @@ func (r *Ranker) IsExplorationMode() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.registry.Exploration
+}
+
+// Decay aplica um "esfriamento" em todas as sinapses.
+// Chamado no boot para simular o esquecimento natural.
+func (r *Ranker) Decay() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for id, current := range r.registry.Weights {
+		if current > 1.0 {
+			// Reduz a "energia" acima do nível base
+			diff := current - 1.0
+			r.registry.Weights[id] = 1.0 + (diff * (1.0 - r.registry.DecayRate))
+			
+			// Se o peso ficou muito próximo de 1, remove para limpar o JSON
+			if r.registry.Weights[id] < 1.01 {
+				delete(r.registry.Weights, id)
+			}
+		}
+	}
+	
+	fmt.Println("[Neural] 🧠 Esquecimento Natural processado (Decay).")
+	r.save()
 }

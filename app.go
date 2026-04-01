@@ -134,7 +134,8 @@ func (a *App) initServices() error {
 	
 	// Inicializa os órgãos de RAG e Aprendizado Neural
 	a.ranker = neural.NewRanker()
-	search := rag.NewSearchService(a.qdrant)
+	a.ranker.Decay() // 🧠 O "Sonho" do Maestro: Consolida e limpa memórias irrelevantes no boot.
+	search := rag.NewSearchService(a.qdrant, a.ranker)
 	a.navigator = rag.NewGraphNavigator(a.qdrant, a.ranker)
 	a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
 	
