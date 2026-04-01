@@ -276,11 +276,13 @@ nav button.active {
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow-y: auto; /* Habilita scroll para views como Settings */
 }
 
 #lumaestro-main.is-orchestrator {
   display: flex;
   flex-direction: row;
+  overflow: hidden; /* Mantém o grafo fixo */
 }
 
 .graph-area {
