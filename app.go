@@ -15,6 +15,7 @@ import (
 	"Lumaestro/internal/obsidian"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/rag"
+	"Lumaestro/internal/rag/neural"
 	"Lumaestro/internal/tools"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -32,6 +33,7 @@ type App struct {
 	chat      *rag.ChatService
 	weaver    *rag.KnowledgeWeaver
 	navigator *rag.GraphNavigator
+	ranker    *neural.Ranker
 	installer *tools.Installer
 	config    *config.Config
 }
@@ -60,6 +62,9 @@ func (a *App) startup(ctx context.Context) {
 	if err := a.initServices(); err != nil {
 		fmt.Printf("🔴 PANICO SILENCIOSO do Backend no initServices: %v\n", err)
 	}
+
+	// Injeta o contexto oficial em todos os serviços APÓS a inicialização para garantir estabilidade
+	a.injectContexts()
 
 	// Iniciar a Escuta de Logs e Terminal
 	go a.listenForLogs()
@@ -127,8 +132,10 @@ func (a *App) initServices() error {
 	a.embedder = emb
 	a.ontology = provider.NewOntologyService(a.embedder.Client)
 	
+	// Inicializa os órgãos de RAG e Aprendizado Neural
+	a.ranker = neural.NewRanker()
 	search := rag.NewSearchService(a.qdrant)
-	a.navigator = rag.NewGraphNavigator(a.qdrant)
+	a.navigator = rag.NewGraphNavigator(a.qdrant, a.ranker)
 	a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
 	
 	a.chat = rag.NewChatService(a.legacyExec, a.orchestrator, search, a.navigator, a.embedder, a.installer)
@@ -137,7 +144,22 @@ func (a *App) initServices() error {
 	// 🔥 Injeção de Autonomia: Maestro agora pode comandar o Crawler
 	a.executor.Tools.Indexer = a.crawler
 
+	// Blindagem: Injeta o contexto se as instâncias acabaram de ser criadas
+	a.injectContexts()
+
 	return nil
+}
+
+// injectContexts garante que todos os motores de RAG tenham o contexto oficial do Wails para EventsEmit
+func (a *App) injectContexts() {
+	if a.ctx == nil {
+		return
+	}
+	fmt.Printf("[App] 🛡️ Injetando Contexto de Ciclo de Vida do Wails nos motores...\n")
+	if a.crawler != nil { a.crawler.SetContext(a.ctx) }
+	if a.weaver != nil { a.weaver.SetContext(a.ctx) }
+	if a.navigator != nil { a.navigator.SetContext(a.ctx) }
+	if a.chat != nil { a.chat.SetContext(a.ctx) }
 }
 
 // listenForLogs ouve o Executor ACP (Logs da IA no formato JSON-RPC via STDOUT)
@@ -720,6 +742,40 @@ Você agora está sendo orquestrado pelo Lumaestro (Modo ACP).
 		return "Erro ao gerar arquivo de contexto: " + err.Error()
 	}
 	return "Contexto GEMINI.md gerado com sucesso no diretório atual!"
+}
+
+// 🧠 NEURAL BINDINGS: Métodos que expõem o aprendizado ativo para a UI
+
+// HandleNodeClick recebe o feedback positivo (clique) e aplica reforço sináptico.
+func (a *App) HandleNodeClick(nodeID string) {
+	if a.ranker != nil {
+		a.ranker.Reinforce(nodeID)
+		
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"source":  "NEURAL",
+			"content": fmt.Sprintf("🧠 Reforço sináptico aplicado ao nó: %s", nodeID),
+		})
+	}
+}
+
+// SetExplorationMode ativa ou desativa o filtro neural no grafo.
+func (a *App) SetExplorationMode(enabled bool) string {
+	if a.ranker != nil {
+		a.ranker.SetExplorationMode(enabled)
+		if enabled {
+			return "Modo Exploração Ativado (Pesos neurais ignorados)."
+		}
+		return "Modo Neural Ativado (Pesos aprendidos influenciam o grafo)."
+	}
+	return "Motor neural não inicializado."
+}
+
+// IsExplorationMode retorna o estado atual para sincronização da UI.
+func (a *App) IsExplorationMode() bool {
+	if a.ranker != nil {
+		return a.ranker.IsExplorationMode()
+	}
+	return false
 }
 
 // AddMCPServer instala um novo servidor MCP na CLI local

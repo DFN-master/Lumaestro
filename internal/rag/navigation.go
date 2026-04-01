@@ -8,16 +8,27 @@ import (
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
+	"Lumaestro/internal/rag/neural"
 )
 
 // GraphNavigator gerencia a expansão de contexto baseada em links com suporte a Destaque Visual.
 type GraphNavigator struct {
+	ctx    context.Context // Contexto persistente do Wails
 	Qdrant *provider.QdrantClient
+	Ranker *neural.Ranker
 }
 
-// NewGraphNavigator inicializa o navegador com foco em Trajetória Semântica.
-func NewGraphNavigator(qdrant *provider.QdrantClient) *GraphNavigator {
-	return &GraphNavigator{Qdrant: qdrant}
+// SetContext injeta o contexto oficial do Wails.
+func (n *GraphNavigator) SetContext(ctx context.Context) {
+	n.ctx = ctx
+}
+
+// NewGraphNavigator inicializa o navegador com foco em Trajetória Semântica e Aprendizado Ativo.
+func NewGraphNavigator(qdrant *provider.QdrantClient, ranker *neural.Ranker) *GraphNavigator {
+	return &GraphNavigator{
+		Qdrant: qdrant,
+		Ranker: ranker,
+	}
 }
 
 // ExpandContext realiza uma travessia inteligente e emite a "Trilha de Raciocínio" para o frontend.
@@ -52,7 +63,7 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 			totalChars += len(content)
 			
 			// Efeito: Acende o nó mestre
-			runtime.EventsEmit(ctx, "node:active", name)
+			runtime.EventsEmit(n.ctx, "node:active", name)
 		}
 	}
 
@@ -84,8 +95,9 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 			if err == nil {
 				// 🎬 Trilha cinematográfica: monta o percurso completo da IA
 				type TrailHop struct {
-					From string `json:"from"`
-					To   string `json:"to"`
+					From   string  `json:"from"`
+					To     string  `json:"to"`
+					Weight float32 `json:"weight"` // Peso aprendido para visualização
 				}
 				var trail []TrailHop
 
@@ -100,17 +112,26 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 					fullContext = append(fullContext, fmt.Sprintf("=== [CONTEXTO_RELACIONADO]: %s ===\n%s", name, content))
 					totalChars += len(content)
 
-					// ✨ VISUAL: destaca link individual E coleta trilha
+					// ✨ VISUAL: destaca link individual E coleta trilha com peso neural
 					for _, note := range initialNotes {
 						parentName, _ := note["name"].(string)
 						if links, ok := note["links"].([]interface{}); ok {
 							for _, l := range links {
 								if uint64(l.(float64)) == uint64(nb["id"].(float64)) {
-									runtime.EventsEmit(ctx, "graph:highlight", map[string]string{
+									
+									// Captura o peso neural atual para o frontend
+									neuralWeight := n.Ranker.GetWeight(name)
+
+									runtime.EventsEmit(n.ctx, "graph:highlight", map[string]interface{}{
 										"source": parentName,
 										"target": name,
+										"weight": neuralWeight,
 									})
-									trail = append(trail, TrailHop{From: parentName, To: name})
+									trail = append(trail, TrailHop{
+										From:   parentName, 
+										To:     name, 
+										Weight: neuralWeight,
+									})
 								}
 							}
 						}

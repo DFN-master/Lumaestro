@@ -19,6 +19,7 @@ type IndexCache map[string]int64
 
 // Crawler gerencia a descoberta e indexação de notas.
 type Crawler struct {
+	ctx       context.Context // Contexto persistente do Wails (Lifecycle)
 	VaultPath string
 	Embedder  *provider.EmbeddingService
 	Qdrant    *provider.QdrantClient
@@ -26,6 +27,11 @@ type Crawler struct {
 	cachePath string
 	cache     IndexCache
 	mu        sync.Mutex
+}
+
+// SetContext injeta o contexto oficial do Wails para emissão de eventos assíncronos.
+func (c *Crawler) SetContext(ctx context.Context) {
+	c.ctx = ctx
 }
 
 // NewCrawler inicializa o crawler com suporte a cache de indexação.
@@ -152,7 +158,7 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 	})
 
 	if totalIndexed > 0 {
-		runtime.EventsEmit(ctx, "agent:log", map[string]string{
+		runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
 			"source":  "SYSTEM",
 			"content": fmt.Sprintf("⚙️ Documentação do projeto integrada ao RAG (%d arquivos).", totalIndexed),
 		})
@@ -190,9 +196,19 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		})
 		content, err := os.ReadFile(path)
 		if err == nil {
-			links := extractLinks(string(content))
-			for _, link := range links {
-				runtime.EventsEmit(ctx, "graph:edge", map[string]string{"source": nodeName, "target": link})
+			linkCounts := make(map[string]int)
+			matches := linkRegex.FindAllStringSubmatch(string(content), -1)
+			for _, m := range matches {
+				if len(m) > 1 {
+					linkCounts[strings.TrimSpace(m[1])]++
+				}
+			}
+			for link, count := range linkCounts {
+				runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
+					"source": nodeName, 
+					"target": link,
+					"weight": count,
+				})
 			}
 		}
 		return false, nil
@@ -225,7 +241,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 			mimeType = "image/jpeg"
 		}
 
-		runtime.EventsEmit(ctx, "agent:log", map[string]string{
+		runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
 			"source":  "CRAWLER",
 			"content": fmt.Sprintf("👁️ Analisando mídia: %s...", info.Name()),
 		})
@@ -261,14 +277,32 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 	c.cache[path] = info.ModTime().Unix()
 	c.mu.Unlock()
 
-	// 4. Feedback Visual em Tempo Real
-	runtime.EventsEmit(ctx, "graph:node", map[string]string{
+	// 4. Feedback Visual em Tempo Real com Reforço Sináptico
+	runtime.EventsEmit(c.ctx, "graph:node", map[string]string{
 		"id":            nodeName,
 		"name":          nodeName,
 		"document-type": forcedDocType,
 	})
-	for _, link := range links {
-		runtime.EventsEmit(ctx, "graph:edge", map[string]string{"source": nodeName, "target": link})
+
+	// Conta links Obsidian
+	linkCounts := make(map[string]int)
+	for _, l := range links {
+		linkCounts[l]++
+	}
+
+	// Adiciona peso das triplas semânticas (IA)
+	for _, t := range triples {
+		if t.Object != "" && len(t.Object) < 50 { 
+			linkCounts[t.Object]++
+		}
+	}
+
+	for target, weight := range linkCounts {
+		runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
+			"source": nodeName, 
+			"target": target,
+			"weight": weight,
+		})
 	}
 
 	return true, nil
@@ -306,7 +340,7 @@ func (c *Crawler) EnsureCollections(ctx context.Context) error {
 
 		if !exists {
 			fmt.Printf("[Crawler] 🏗️ Criando coleção inexistente: %s (Dim: %d)\n", name, dimension)
-			runtime.EventsEmit(ctx, "agent:log", map[string]string{
+			runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
 				"source":  "CRAWLER",
 				"content": fmt.Sprintf("🏗️ Preparando infraestrutura: Criando coleção '%s' (3072 dim)...", name),
 			})

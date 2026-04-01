@@ -29,7 +29,11 @@ export function GetProjectDoc(arg1:string):Promise<string>;
 
 export function GetToolsStatus():Promise<Record<string, boolean>>;
 
+export function HandleNodeClick(arg1:string):Promise<void>;
+
 export function InstallTool(arg1:string):Promise<string>;
+
+export function IsExplorationMode():Promise<boolean>;
 
 export function ListAgentSessions(arg1:string):Promise<Array<agents.SessionInfo>>;
 
@@ -60,6 +64,8 @@ export function SendAgentInput(arg1:string,arg2:string,arg3:Array<Record<string,
 export function SendTerminalData(arg1:string,arg2:string):Promise<void>;
 
 export function SetAutonomousMode(arg1:boolean):Promise<string>;
+
+export function SetExplorationMode(arg1:boolean):Promise<string>;
 
 export function SetupTool(arg1:string):Promise<string>;
 

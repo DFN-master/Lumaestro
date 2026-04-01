@@ -14,12 +14,18 @@ import (
 
 // ChatService orquestra a inteligência via processos CLI.
 type ChatService struct {
+	ctx          context.Context // Contexto persistente do Wails
 	Executor     *agents.Executor
 	Orchestrator *agents.Orchestrator
 	Search       *SearchService
 	Nav          *GraphNavigator
 	Embedder     *provider.EmbeddingService
 	Installer    *tools.Installer
+}
+
+// SetContext injeta o contexto oficial do Wails.
+func (s *ChatService) SetContext(ctx context.Context) {
+	s.ctx = ctx
 }
 
 // NewChatService inicializa o orquestrador de chat baseado em CLI.
@@ -51,11 +57,11 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 
 	// 2. Gerar vetor da pergunta e relatar início do raciocínio
 	now := time.Now().Format("15:04")
-	runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] 🔍 buscando '%s'...", now, question))
+	runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 🔍 buscando '%s'...", now, question))
 	
 	vector, err := s.Embedder.GenerateEmbedding(ctx, question)
 	if err != nil {
-		runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] ❌ Erro ao criar semântica.", now))
+		runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ❌ Erro ao criar semântica.", now))
 		return "", err
 	}
 	
@@ -63,7 +69,7 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 	// Aumentado de 3 para 5 para maior cobertura de contexto
 	notes, _ := s.Search.SearchNote(ctx, vector, 5)
 	if len(notes) > 0 {
-		runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] 📄 encontradas %d notas matrizes para a resposta.", now, len(notes)))
+		runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 📄 encontradas %d notas matrizes para a resposta.", now, len(notes)))
 	}
 
 	fullContext := s.Nav.ExpandContext(ctx, notes)
@@ -72,11 +78,11 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 	// 3. Brilhar as notas iniciais encontradas no Grafo e lançar Log
 	for _, note := range notes {
 		if noteName, ok := note["name"].(string); ok {
-			runtime.EventsEmit(ctx, "graph:log", fmt.Sprintf("[%s] ✨ lendo notas mestre -> %s", time.Now().Format("15:04"), noteName))
-			runtime.EventsEmit(ctx, "node:active", noteName)
+			runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ✨ lendo notas mestre -> %s", time.Now().Format("15:04"), noteName))
+			runtime.EventsEmit(s.ctx, "node:active", noteName)
 			
 			// Envia o própio nó principal para o painel se ele não foi carregado
-			runtime.EventsEmit(ctx, "graph:node", map[string]string{"id": noteName, "name": noteName})
+			runtime.EventsEmit(s.ctx, "graph:node", map[string]string{"id": noteName, "name": noteName})
 		}
 	}
 

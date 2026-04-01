@@ -89,6 +89,9 @@ onMounted(async () => {
     alert("ERRO RARO DE COMUNICAÇÃO: " + e)
   }
   
+  // Inicializa o estado do modo de exploração
+  isExplorationMode.value = await window.go.main.App.IsExplorationMode()
+
   refreshStatus()
 
   EventsOn('installer:log', (log) => {
@@ -213,6 +216,13 @@ const handleSwitchAccount = async (name) => {
 
 const activeTab = ref('geral')
 const newAccName = ref('')
+
+const isExplorationMode = ref(false)
+
+const toggleExplorationMode = async () => {
+  const res = await window.go.main.App.SetExplorationMode(isExplorationMode.value)
+  console.log(res)
+}
 </script>
 
 <template>
@@ -261,6 +271,21 @@ const newAccName = ref('')
         <div class="premium-form-group">
           <label>Alcance da Teia (Vizinhos): <span class="highlight-val">{{ config.graph_neighbor_limit }}</span></label>
           <input v-model.number="config.graph_neighbor_limit" type="range" min="1" max="25" step="1" class="maestro-range" />
+        </div>
+
+        <!-- SEÇÃO NEURAL -->
+        <div class="sec-card neural-sec" style="margin-top: 2rem; border-color: rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.05);">
+           <div class="sec-info">
+              <h5 style="margin: 0; font-weight: 800; font-size: 1rem; color: #fff;">🧠 Modo de Exploração Neural</h5>
+              <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">
+                Ativado: Mostra resultados brutos (similaridade pura).<br/>
+                Desativado: Prioriza notas que você acessa com frequência (Sinapses Fortes).
+              </p>
+           </div>
+           <label class="hybrid-toggle-maestro">
+              <input type="checkbox" v-model="isExplorationMode" @change="toggleExplorationMode" />
+              <span class="m-slider-sec" style="background: #4c1d95;"></span>
+           </label>
         </div>
 
         <div class="premium-form-group">

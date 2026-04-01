@@ -54,8 +54,16 @@ export function GetToolsStatus() {
   return window['go']['main']['App']['GetToolsStatus']();
 }
 
+export function HandleNodeClick(arg1) {
+  return window['go']['main']['App']['HandleNodeClick'](arg1);
+}
+
 export function InstallTool(arg1) {
   return window['go']['main']['App']['InstallTool'](arg1);
+}
+
+export function IsExplorationMode() {
+  return window['go']['main']['App']['IsExplorationMode']();
 }
 
 export function ListAgentSessions(arg1) {
@@ -116,6 +124,10 @@ export function SendTerminalData(arg1, arg2) {
 
 export function SetAutonomousMode(arg1) {
   return window['go']['main']['App']['SetAutonomousMode'](arg1);
+}
+
+export function SetExplorationMode(arg1) {
+  return window['go']['main']['App']['SetExplorationMode'](arg1);
 }
 
 export function SetupTool(arg1) {

@@ -12,9 +12,15 @@ import (
 
 // KnowledgeWeaver é o "Tecelão de Conhecimento" que transforma conversas em sinapses.
 type KnowledgeWeaver struct {
+	ctx      context.Context // Contexto persistente do Wails
 	Ontology *provider.OntologyService
 	Qdrant   *provider.QdrantClient
 	Embedder *provider.EmbeddingService
+}
+
+// SetContext injeta o contexto oficial do Wails para processos de background.
+func (w *KnowledgeWeaver) SetContext(ctx context.Context) {
+	w.ctx = ctx
 }
 
 // NewKnowledgeWeaver inicializa o tecelão.
@@ -57,13 +63,13 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 					"status": "legacy",
 					"archived_at": time.Now().Format(time.RFC3339),
 				})
-				runtime.EventsEmit(ctx, "agent:log", map[string]string{
+				runtime.EventsEmit(w.ctx, "agent:log", map[string]string{
 					"source":  "WEAVER",
 					"content": fmt.Sprintf("📜 Conhecimento Legado: '%s' foi superado por '%s'.", existing["object"], t.Object),
 				})
 			} else {
 				// CONFLITO TOTAL: Emite Alerta Vermelho para o Frontend com os dados completos para resolução
-				runtime.EventsEmit(ctx, "graph:conflict", map[string]interface{}{
+				runtime.EventsEmit(w.ctx, "graph:conflict", map[string]interface{}{
 					"subject":    t.Subject,
 					"predicate":  t.Predicate,
 					"old":        existing["object"],
@@ -95,19 +101,19 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 		w.Qdrant.UpsertPoint("knowledge_graph", id, vector, payload)
 
 		// 4. ATUALIZAÇÃO VISUAL
-		runtime.EventsEmit(ctx, "graph:node", map[string]string{
+		runtime.EventsEmit(w.ctx, "graph:node", map[string]string{
 			"id":            t.Subject,
 			"name":          t.Subject,
 			"document-type": "memory",
 			"session-id":    sessionID,
 		})
-		runtime.EventsEmit(ctx, "graph:node", map[string]string{
+		runtime.EventsEmit(w.ctx, "graph:node", map[string]string{
 			"id":            t.Object,
 			"name":          t.Object,
 			"document-type": "memory",
 			"session-id":    sessionID,
 		})
-		runtime.EventsEmit(ctx, "graph:edge", map[string]string{
+		runtime.EventsEmit(w.ctx, "graph:edge", map[string]string{
 			"source": t.Subject,
 			"target": t.Object,
 		})

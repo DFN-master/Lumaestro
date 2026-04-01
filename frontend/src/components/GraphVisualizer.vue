@@ -23,7 +23,7 @@ let Graph = null
 let clickedNodeTimeout = null
 let moveInterval = null
 const keys = { w: false, a: false, s: false, d: false, q: false, e: false }
-const moveSpeed = 4 // Velocidade de voo ajustada para imersão
+const moveSpeed = 20 // Velocidade de voo aumentada em 5x para navegação rápida
 
 const selectedNode = ref(null)
 const nodeDetails = ref(null)
@@ -95,32 +95,66 @@ const initGraph = () => {
                 <br/><b>${label}</b>
               </div>`
     })
-    .nodeRelSize(1) // Escala base 1 para usar as geometrias customizadas precisamente
-    .nodeOpacity(0.9)
+    .nodeColor(node => {
+      const type = node['document-type'] || 'chunk'
+      if (type === 'system') return '#ffffff'
+      if (type === 'source' || type === 'obsidian') return '#00f2ff' // Ciano Néon
+      if (type === 'memory') return '#fcd34d' // Dourado
+      return '#3b82f6' // Azul padrão
+    })
+    .nodeRelSize(6) // Tamanho de colisão aumentado
+    .nodeOpacity(1)
+    .nodeThreeObject(node => {
+      const type = node['document-type'] || 'chunk'
+      let color = '#3b82f6'
+      if (type === 'system') color = '#ffffff'
+      if (type === 'source' || type === 'obsidian') color = '#00f2ff'
+      if (type === 'memory') color = '#fcd34d'
+
+      // Geometria de Neurônio (Brilho Central Intenso)
+      const obj = new THREE.Mesh(
+        new THREE.SphereGeometry(16),
+        new THREE.MeshStandardMaterial({
+          color: color,
+          transparent: true,
+          opacity: 0.95,
+          emissive: color,
+          emissiveIntensity: 1.2, // Brilho de Sinapse Ativa
+          roughness: 0,
+          metalness: 1
+        })
+      )
+      return obj
+    })
+    .nodeThreeObjectExtend(true)
+    .linkCurvature(0.25)
     .linkColor(link => {
       const s = link.source.id || link.source
       const t = link.target.id || link.target
-
-      // Se o link está no percurso da IA ou foi clicado, acende em Ciano/Azul
-      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) {
-        return '#4facfe'
-      }
       
-      // Se o link está na trilha de raciocínio RAG, acende em verde néon
-      if (highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) {
-        return '#4ade80' 
-      }
-      return 'rgba(59, 130, 246, 0.3)'
+      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`)) return '#ffffff' 
+      return 'rgba(0, 242, 255, 0.6)'
     })
+    .linkOpacity(0.5)
     .linkWidth(link => {
-      const s = link.source.id || link.source
-      const t = link.target.id || link.target
-      if (clickedNodeLinks.value.has(`${s}-${t}`) || clickedNodeLinks.value.has(`${t}-${s}`) || 
-          highlightedLinks.value.has(`${s}-${t}`) || highlightedLinks.value.has(`${t}-${s}`)) {
-        return 2.5 // Espessura para destaque
-      }
-      return 0.5
+      // Reforço Sináptico: Largura baseada no peso neural aprendido se disponível, caso contrário peso base
+      const weight = link.weight || 1
+      return Math.min(1.8 + (weight * 0.8), 8.0) // Limite de 8px para garantir elegância
     })
+    .linkDirectionalParticles(link => {
+       // Mais partículas para conexões mais fortes
+       const weight = link.weight || 1
+       return Math.min(2 + Math.floor(weight * 2), 15)
+    })
+    .linkDirectionalParticleSpeed(link => {
+       const weight = link.weight || 1
+       return 0.008 + (weight * 0.002)
+    })
+    .linkDirectionalParticleWidth(link => {
+       const weight = link.weight || 1
+       return 3.5 + Math.min(weight, 4)
+    })
+
     .linkDirectionalParticles(link => {
       const s = link.source.id || link.source
       const t = link.target.id || link.target
@@ -178,6 +212,9 @@ const initGraph = () => {
       }, 5000)
 
       // ── Carregar Proveniência (Auditoria) ──
+      // ── Reforço Neural (Aprendizado Ativo) ──
+      window.go.main.App.HandleNodeClick(node.id)
+
       selectedNode.value = node
       nodeDetails.value = null // Reset imediato para mostrar o loader
       nodeDetails.value = { loading: true } // Loader fluido
@@ -255,12 +292,8 @@ const initGraph = () => {
     const nodeColor = isActive ? colors.active : (isVirtual ? colors.virtual : displayColor)
     
     // Esferas com tamanhos diferentes por importância (NÚCLEOS vs IDEIAS)
-    let radius = 1.2 // Tamanho base para Ideias
-    if (isActive) radius = 5.0
-    else if (type === 'chunk' || type === 'system') radius = 4.0 // Os "Sóis" do conhecimento
-    else if (type === 'source') radius = 3.0
-    else if (isVirtual) radius = 0.8
-
+    let radius = 16 // Tamanho base para Ideias
+    
     const geometry = new THREE.SphereGeometry(radius)
     const material = new THREE.MeshStandardMaterial({
       color: nodeColor,
@@ -360,6 +393,44 @@ onMounted(() => {
   window.runtime.EventsOn("graph:conflict", (conflict) => {
     currentConflict.value = conflict
     console.warn("⚠️ CONFLITO DETECTADO:", conflict)
+  })
+
+  // 🕸️ Ouvinte de Arestas Dinâmicas (Streaming de Conexões)
+  window.runtime.EventsOn("graph:edge", (edge) => {
+    if (!Graph || !edge?.source || !edge?.target) return
+    
+    const { nodes, links } = Graph.graphData()
+    
+    // Verifica se os nós existem antes de criar o link no motor ForceGraph
+    const sourceNode = nodes.find(n => n.id === edge.source)
+    const targetNode = nodes.find(n => n.id === edge.target)
+    
+    if (sourceNode && targetNode) {
+      // Evita duplicatas visuais
+      const exists = links.some(l => 
+        (l.source.id === edge.source && l.target.id === edge.target) || 
+        (l.source.id === edge.target && l.target.id === edge.source)
+      )
+      
+      if (!exists) {
+        links.push({
+          source: edge.source,
+          target: edge.target,
+          weight: edge.weight || 1
+        })
+        Graph.graphData({ nodes, links })
+      } else {
+        // Se a aresta já existe, reforçamos o peso dela (Reforço Sináptico Dinâmico)
+        const targetLink = links.find(l => 
+          (l.source.id === edge.source && l.target.id === edge.target) || 
+          (l.source.id === edge.target && l.target.id === edge.source)
+        )
+        if (targetLink) {
+          targetLink.weight = (targetLink.weight || 1) + (edge.weight || 1)
+          Graph.graphData({ nodes, links })
+        }
+      }
+    }
   })
 
   // 🎮 Módulo de Movimentação Gamificada (WASD + QE)
