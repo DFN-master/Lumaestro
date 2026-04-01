@@ -400,36 +400,46 @@ onMounted(() => {
     if (!Graph || !edge?.source || !edge?.target) return
     
     const { nodes, links } = Graph.graphData()
+    let dataChanged = false
     
-    // Verifica se os nós existem antes de criar o link no motor ForceGraph
-    const sourceNode = nodes.find(n => n.id === edge.source)
-    const targetNode = nodes.find(n => n.id === edge.target)
+    // Assegura que ambos os nós existem no grafo. Se não, cria um "nó virtual/fantasma"
+    // Isso é vital porque o Go extrai conexões semânticas (conceitos puros) que não são arquivos de texto!
+    let sourceNode = nodes.find(n => n.id === edge.source)
+    if (!sourceNode) {
+      sourceNode = { id: edge.source, name: edge.source, "document-type": "chunk", virtual: true }
+      nodes.push(sourceNode)
+      dataChanged = true
+    }
+
+    let targetNode = nodes.find(n => n.id === edge.target)
+    if (!targetNode) {
+      targetNode = { id: edge.target, name: edge.target, "document-type": "chunk", virtual: true }
+      nodes.push(targetNode)
+      dataChanged = true
+    }
     
-    if (sourceNode && targetNode) {
-      // Evita duplicatas visuais
-      const exists = links.some(l => 
-        (l.source.id === edge.source && l.target.id === edge.target) || 
-        (l.source.id === edge.target && l.target.id === edge.source)
-      )
-      
-      if (!exists) {
-        links.push({
-          source: edge.source,
-          target: edge.target,
-          weight: edge.weight || 1
-        })
-        Graph.graphData({ nodes, links })
-      } else {
-        // Se a aresta já existe, reforçamos o peso dela (Reforço Sináptico Dinâmico)
-        const targetLink = links.find(l => 
-          (l.source.id === edge.source && l.target.id === edge.target) || 
-          (l.source.id === edge.target && l.target.id === edge.source)
-        )
-        if (targetLink) {
-          targetLink.weight = (targetLink.weight || 1) + (edge.weight || 1)
-          Graph.graphData({ nodes, links })
-        }
-      }
+    // Evita duplicatas visuais (verifica pelo ID e assegura não duplicar bidirecionalmente)
+    const exists = links.find(l => 
+      ((l.source.id || l.source) === edge.source && (l.target.id || l.target) === edge.target) || 
+      ((l.source.id || l.source) === edge.target && (l.target.id || l.target) === edge.source)
+    )
+    
+    if (!exists) {
+      links.push({
+        source: edge.source,
+        target: edge.target,
+        weight: edge.weight || 1
+      })
+      dataChanged = true
+    } else {
+      // Se a aresta já existe, reforçamos o peso dela (Reforço Sináptico Dinâmico)
+      exists.weight = (exists.weight || 1) + (edge.weight || 1)
+      dataChanged = true
+    }
+
+    if (dataChanged) {
+      // Atualiza o motor físico preservando as coordenadas antigas
+      Graph.graphData({ nodes, links })
     }
   })
 
@@ -608,20 +618,24 @@ onUnmounted(() => {
 })
 
 // -- NOVA LÓGICA DE SINCRONIZAÇÃO TOTAL --
-const handleFullSync = async () => {
+const showConfirmModal = ref(false)
+
+const handleFullSync = () => {
   if (scanning.value) return
-  
-  if (confirm("Deseja forçar uma sincronização total com o Coolify? Isso limpará o cache local.")) {
-    scanning.value = true
-    try {
-      // Chama o método atômico no Go que limpa e reindexa em sequência garantida
-      await window.go.main.App.FullSync()
-    } catch (e) {
-      console.error("Erro na sincronização:", e)
-    } finally {
-      scanning.value = false
-      if (Graph) Graph.zoomToFit(800)
-    }
+  showConfirmModal.value = true
+}
+
+const executeFullSync = async () => {
+  showConfirmModal.value = false
+  scanning.value = true
+  try {
+    // Chama o método atômico no Go que limpa e reindexa em sequência garantida
+    await window.go.main.App.FullSync()
+  } catch (e) {
+    console.error("Erro na sincronização:", e)
+  } finally {
+    scanning.value = false
+    if (Graph) Graph.zoomToFit(800)
   }
 }
 
@@ -641,6 +655,19 @@ const triggerScan = async () => {
 
 <template>
   <div class="graph-wrapper animate-fade-in">
+    <!-- MODAL DE CONFIRMAÇÃO PREMIUM -->
+    <div v-if="showConfirmModal" class="premium-modal-overlay">
+      <div class="premium-modal-content">
+        <div class="modal-icon">⚠️</div>
+        <h3 class="modal-title">Sincronização Atômica</h3>
+        <p class="modal-text">Deseja forçar uma sincronização total com o motor vetorial?<br/><strong>Isso expurgará o cache local.</strong></p>
+        <div class="modal-actions">
+           <button @click="showConfirmModal = false" class="btn-cancel">CANCELAR</button>
+           <button @click="executeFullSync" class="btn-confirm">INICIAR VARREDURA</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Container para o Grafo 3D (WebGL) -->
     <div ref="containerRef" class="main-canvas"></div>
     
@@ -1153,6 +1180,105 @@ const triggerScan = async () => {
 .has-conflicts .value {
   color: #ef4444;
   animation: pulse-red 1s infinite;
+}
+
+.health-btn:hover { background: rgba(59, 130, 246, 0.2); }
+
+/* --- MODAL PREMIUM --- */
+.premium-modal-overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.premium-modal-content {
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  padding: 2.5rem;
+  border-radius: 20px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(59, 130, 246, 0.1);
+  text-align: center;
+  max-width: 400px;
+  transform: translateY(0);
+  animation: slideUp 0.3s ease;
+}
+
+.modal-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.modal-title {
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.4rem;
+  font-weight: 800;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: 1px;
+}
+
+.modal-text {
+  color: var(--p-text-dim, #94a3b8);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-bottom: 2rem;
+}
+
+.modal-text strong {
+  color: #ef4444;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.btn-cancel {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 0.8rem 1.5rem;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: 0.2s;
+  letter-spacing: 1px;
+  font-size: 0.8rem;
+}
+.btn-cancel:hover { background: rgba(255, 255, 255, 0.1); }
+
+.btn-confirm {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border: none;
+  color: #fff;
+  padding: 0.8rem 1.5rem;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: 0.3s;
+  letter-spacing: 1px;
+  font-size: 0.8rem;
+  box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+}
+.btn-confirm:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 25px rgba(59, 130, 246, 0.4);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .health-btn {

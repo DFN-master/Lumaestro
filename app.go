@@ -1,6 +1,13 @@
 package main
 
 import (
+	"Lumaestro/internal/agents"
+	"Lumaestro/internal/config"
+	"Lumaestro/internal/obsidian"
+	"Lumaestro/internal/provider"
+	"Lumaestro/internal/rag"
+	"Lumaestro/internal/rag/neural"
+	"Lumaestro/internal/tools"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -9,33 +16,29 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
-	"Lumaestro/internal/agents"
-	"Lumaestro/internal/config"
-	"Lumaestro/internal/obsidian"
-	"Lumaestro/internal/provider"
-	"Lumaestro/internal/rag"
-	"Lumaestro/internal/rag/neural"
-	"Lumaestro/internal/tools"
+
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
 type App struct {
-	ctx       context.Context
-	executor      *agents.ACPExecutor
-	orchestrator  *agents.Orchestrator
-	legacyExec    *agents.Executor // Apenas para ExecuteCLI fallback se necessário, ou podemos migrar.
-	ontology  *provider.OntologyService
-	crawler   *obsidian.Crawler
-	qdrant    *provider.QdrantClient
-	embedder  *provider.EmbeddingService
-	chat      *rag.ChatService
-	weaver    *rag.KnowledgeWeaver
-	navigator *rag.GraphNavigator
-	ranker    *neural.Ranker
-	installer *tools.Installer
-	config    *config.Config
+	ctx          context.Context
+	executor     *agents.ACPExecutor
+	orchestrator *agents.Orchestrator
+	legacyExec   *agents.Executor // Apenas para ExecuteCLI fallback se necessário, ou podemos migrar.
+	ontology     *provider.OntologyService
+	crawler      *obsidian.Crawler
+	qdrant       *provider.QdrantClient
+	embedder     *provider.EmbeddingService
+	chat         *rag.ChatService
+	weaver       *rag.KnowledgeWeaver
+	navigator    *rag.GraphNavigator
+	ranker       *neural.Ranker
+	installer    *tools.Installer
+	config       *config.Config
+	muInit       sync.Mutex // 🛡️ Trava de Segurança contra inicialização dupla (HMR/Wails)
 }
 
 // NewApp creates a new App application struct
@@ -58,34 +61,50 @@ func (a *App) startup(ctx context.Context) {
 	// Sincroniza o PATH imediatamente (Garante que claude/gemini sejam encontrados)
 	a.installer.SyncPath()
 
+	// Iniciar a Escuta de Logs e Terminal (não depende dos motores)
+	go a.listenForLogs()
+	go a.listenForInstallerLogs()
+	go a.listenForTerminalOutput()
+
+	// 🚀 Boot Assíncrono: Garante que o WebView esteja pronto antes de emitir eventos
+	go a.bootSequence()
+}
+
+// bootSequence executa a inicialização dos motores em background,
+// emitindo eventos de diagnóstico para o frontend em tempo real.
+// Roda em goroutine para não bloquear o startup do Wails (evita deadlock no EventsEmit).
+func (a *App) bootSequence() {
+	// Delay de 1s para o frontend renderizar e montar o listener Vue de boot:stage
+	time.Sleep(1 * time.Second)
+
+	a.emitBoot("config", "⚙️", "Carregando configurações...")
+
 	// Tenta inicializar os serviços logo na subida
 	if err := a.initServices(); err != nil {
 		fmt.Printf("🔴 PANICO SILENCIOSO do Backend no initServices: %v\n", err)
+		a.emitBoot("error", "🔴", "Falha na inicialização: " + err.Error())
+		return
 	}
 
 	// Injeta o contexto oficial em todos os serviços APÓS a inicialização para garantir estabilidade
 	a.injectContexts()
 
-	// Iniciar a Escuta de Logs e Terminal
-	go a.listenForLogs()
-	go a.listenForInstallerLogs()
-	go a.listenForTerminalOutput()
-
-	// 🚀 Auto-Start: Inicia os agentes e sincroniza conhecimento no boot
+	// 🚀 Auto-Start: Inicia os agentes e sincroniza conhecimento
 	if a.config != nil && a.config.GeminiAPIKey != "" {
-		go func() {
-			time.Sleep(2000 * time.Millisecond)
-			fmt.Println("[BOOT] Maestro Online. Sincronizando conhecimento e restaurando agentes...")
-			
-			// 1. Inicia o Agente Padrão
-			a.StartAgentSession("gemini")
+		fmt.Println("[BOOT] Maestro Online. Sincronizando conhecimento e restaurando agentes...")
+		
+		// 1. Inicia o Agente Padrão (Se configurado para auto-start)
+		if len(a.config.AutoStartAgents) > 0 {
+			a.emitBoot("agent", "🤖", "Iniciando agente " + a.config.AutoStartAgents[0] + "...")
+			a.StartAgentSession(a.config.AutoStartAgents[0])
+		}
 
-			// 2. Indexação Silenciosa (RAG)
-			if a.crawler != nil && a.config.ObsidianVaultPath != "" {
-				fmt.Println("[BOOT] Iniciando Auto-Scan do Obsidian em background...")
-				a.ScanVault()
-			}
-		}()
+		// 2. Indexação Silenciosa (RAG) - Agora com garantia de motor pronto!
+		if a.crawler != nil && a.config.ObsidianVaultPath != "" {
+			a.emitBoot("scan", "✈️", "Decolando Auto-Scan do Obsidian...")
+			fmt.Println("[BOOT] ✈️ Motores Prontos. Decolando Auto-Scan do Obsidian...")
+			a.ScanVault()
+		}
 	}
 }
 
@@ -115,6 +134,13 @@ func (a *App) ensureCollections() {
 
 // initServices inicializa os motores de IA e RAG se as configurações permitirem
 func (a *App) initServices() error {
+	a.muInit.Lock()
+	defer a.muInit.Unlock()
+
+	if a.crawler != nil {
+		return nil // Já inicializado
+	}
+
 	cfg, err := config.Load()
 	if err != nil || cfg == nil {
 		fmt.Printf("⚠️ Arquivo de configuração não encontrado ou vazio. Aguardando setup na UI...\n")
@@ -123,27 +149,45 @@ func (a *App) initServices() error {
 	a.config = cfg
 
 	// Inicializa Qdrant e Embeddings
+	fmt.Println("[App] 🔋 Conectando ao motor vetorial Qdrant...")
+	a.emitBoot("qdrant", "🔋", "Conectando ao banco vetorial Qdrant...")
 	a.qdrant = provider.NewQdrantClient(cfg.QdrantURL, cfg.QdrantAPIKey)
+
+	fmt.Println("[App] 🧬 Inicializando motor de Embeddings (Gemini)...")
+	a.emitBoot("embeddings", "🧬", "Inicializando motor de Embeddings (Gemini)...")
 	emb, err := provider.NewEmbeddingService(a.ctx, cfg.GeminiAPIKey)
 	if err != nil {
+		fmt.Printf("🔴 FALHA CRÍTICA: Motor de Embeddings não iniciou: %v\n", err)
+		a.emitBoot("error", "🔴", "Motor de Embeddings falhou: "+err.Error())
 		return err
 	}
 
 	a.embedder = emb
 	a.ontology = provider.NewOntologyService(a.embedder.Client)
-	
+
 	// Inicializa os órgãos de RAG e Aprendizado Neural
+	fmt.Println("[App] 🧠 Ativando Córtex Neural (Ranker & Decay)...")
+	a.emitBoot("neural", "🧠", "Ativando Córtex Neural — Esquecimento Natural (Decay)...")
 	a.ranker = neural.NewRanker()
-	a.ranker.Decay() // 🧠 O "Sonho" do Maestro: Consolida e limpa memórias irrelevantes no boot.
+	a.ranker.Decay()
+
 	search := rag.NewSearchService(a.qdrant, a.ranker)
 	a.navigator = rag.NewGraphNavigator(a.qdrant, a.ranker)
 	a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
-	
+
+	fmt.Println("[App] 🎭 Orquestrando serviços de Chat...")
+	a.emitBoot("chat", "🎭", "Orquestrando serviços de Chat e RAG...")
 	a.chat = rag.NewChatService(a.legacyExec, a.orchestrator, search, a.navigator, a.embedder, a.installer)
+
+	fmt.Println("[App] 🕸️ Tecendo o Crawler do Obsidian...")
+	a.emitBoot("crawler", "🕸️", "Tecendo o Crawler do Obsidian...")
 	a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
 
 	// 🔥 Injeção de Autonomia: Maestro agora pode comandar o Crawler
 	a.executor.Tools.Indexer = a.crawler
+
+	fmt.Println("[App] ✅ TODOS OS MOTORES LIGADOS! Sistema RAG pronto para decolagem.")
+	a.emitBoot("ready", "✅", "Todos os motores ligados! Maestro pronto.")
 
 	// Blindagem: Injeta o contexto se as instâncias acabaram de ser criadas
 	a.injectContexts()
@@ -157,17 +201,35 @@ func (a *App) injectContexts() {
 		return
 	}
 	fmt.Printf("[App] 🛡️ Injetando Contexto de Ciclo de Vida do Wails nos motores...\n")
-	if a.crawler != nil { a.crawler.SetContext(a.ctx) }
-	if a.weaver != nil { a.weaver.SetContext(a.ctx) }
-	if a.navigator != nil { a.navigator.SetContext(a.ctx) }
-	if a.chat != nil { a.chat.SetContext(a.ctx) }
+	if a.crawler != nil {
+		a.crawler.SetContext(a.ctx)
+	}
+	if a.weaver != nil {
+		a.weaver.SetContext(a.ctx)
+	}
+	if a.navigator != nil {
+		a.navigator.SetContext(a.ctx)
+	}
+	if a.chat != nil {
+		a.chat.SetContext(a.ctx)
+	}
+}
+
+// emitBoot envia um evento de diagnóstico de boot para o frontend
+func (a *App) emitBoot(stage string, icon string, message string) {
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, "boot:stage", map[string]string{
+		"stage": stage, "icon": icon, "message": message,
+	})
 }
 
 // listenForLogs ouve o Executor ACP (Logs da IA no formato JSON-RPC via STDOUT)
 func (a *App) listenForLogs() {
 	for log := range a.executor.LogChan {
 		// Log discreto apenas para monitoramento técnico de fluxo
-		// fmt.Printf("[Wails] Evento agent:log enviado\n") 
+		// fmt.Printf("[Wails] Evento agent:log enviado\n")
 		runtime.EventsEmit(a.ctx, "agent:log", log)
 	}
 }
@@ -196,23 +258,17 @@ func (a *App) listenForTerminalOutput() {
 
 // AskAgent processa a pergunta em segundo plano para permitir Streaming Real
 func (a *App) AskAgent(agentName string, prompt string) string {
-	fmt.Printf("[BACKEND] AskAgent chamado para: %s com prompt: %s\n", agentName, prompt)
-	// No modo TUDO ACP, as perguntas normais deverão ser injetadas na sessão principal ACP!
+	fmt.Printf("[BACKEND] AskAgent chamado para: %s\n", agentName)
+
 	if a.chat == nil {
-		if err := a.initServices(); err != nil {
-			return "⚠️ O motor do Maestro está desligado. Por favor, verifique sua Gemini API Key nas configurações."
+		fmt.Println("[App] ⚠️ Motor de Chat nulo. Tentando inicialização de emergência...")
+		if err := a.initServices(); err != nil || a.chat == nil {
+			return "⚠️ O motor do Maestro está desligado. Verifique sua Gemini API Key nas configurações."
 		}
 	}
 
 	if agentName == "" {
 		agentName = "gemini"
-	}
-
-	// Modo Legado AskAgent (RAG)
-	if a.chat == nil {
-		if err := a.initServices(); err != nil {
-			return "⚠️ O motor do Maestro está desligado. Por favor, verifique sua Gemini API Key nas configurações."
-		}
 	}
 
 	go func() {
@@ -229,7 +285,7 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 		}
 
 		fmt.Printf("[BACKEND] Resposta da Orquestração recebida. Injetando na sessão ACP...\n")
-		
+
 		// Injeta a pergunta (prompt completo com RAG e histórico) na sessão ACP ativa
 		// O executor cuidará de enviar via StdIn seguindo o protocolo ndJSON
 		err = a.executor.SendInput("default", response, nil)
@@ -252,12 +308,18 @@ func (a *App) ScanVault() string {
 
 	// 🕊️ RAG em Segundo Plano: Previne travamento total da UI e do Chat
 	go func() {
+		// 1. Verificação Crítica de Motor e Contexto
+		if a.crawler == nil || a.ctx == nil {
+			fmt.Println("[BACKEND] ⏳ Scan ADIADO: Aguardando prontidão dos motores...")
+			return
+		}
+
+		// 2. Notificação Inicial (Agora segura pelo Nil Guard)
 		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 			"source":  "CRAWLER",
 			"content": "🚀 Iniciando Sincronização Semântica Completa em background...",
 		})
 
-		// 1. Indexar o cofre do Obsidian (Usuário)
 		err := a.crawler.IndexVault(a.ctx)
 		if err != nil {
 			fmt.Printf("[BACKEND] Erro na Indexação do Vault: %v\n", err)
@@ -287,13 +349,19 @@ func (a *App) ScanVault() string {
 
 // FullSync limpa o cache e inicia uma indexação completa atômica.
 func (a *App) FullSync() string {
+	if a.crawler == nil {
+		return "⚠️ Motor de indexação indisponível."
+	}
 	fmt.Println("[BACKEND] 🔄 Solicitado FullSync Atômico. Limpando cache...")
 	a.crawler.PurgeCache()
 	return a.ScanVault()
 }
 
-// PurgeCache limpa todo o histórico de indexação local, forçando o Maestro a reenviar tudo para o Qdrant.
+// PurgeCache limpa todo o histórico de indexação local.
 func (a *App) PurgeCache() string {
+	if a.crawler == nil {
+		return "⚠️ Motor de indexação indisponível."
+	}
 	err := a.crawler.PurgeCache()
 	if err != nil {
 		return fmt.Sprintf("Erro ao limpar cache: %v", err)
@@ -310,7 +378,7 @@ func (a *App) RunVectorDiagnostic() map[string]interface{} {
 		fmt.Printf("[BACKEND] Erro ao preparar coleções: %v\n", err)
 		return map[string]interface{}{"success": false, "error": "Falha ao preparar coleções no Qdrant: " + err.Error()}
 	}
-	
+
 	// 🛡️ Segurança: Garante que os serviços estejam inicializados
 	if a.embedder == nil || a.qdrant == nil {
 		fmt.Println("[BACKEND] ⚠️ Motores não inicializados. Tentando reativar...")
@@ -365,11 +433,13 @@ func (a *App) RunVectorDiagnostic() map[string]interface{} {
 	}
 }
 
-// CheckConnection verifica se o Qdrant está acessível
+// CheckConnection verifica se o Qdrant está acessível e se o motor de RAG (Crawler) já decolou.
 func (a *App) CheckConnection() bool {
-	res := a.qdrant != nil && a.qdrant.BaseURL != ""
-	fmt.Printf("[BACKEND-UI] CheckConnection disparado pelo frontend. Retornando: %v\n", res)
-	return res
+	if a.qdrant == nil || a.config == nil || a.crawler == nil {
+		fmt.Println("[BACKEND-UI] CheckConnection: Motores ainda aquecendo...")
+		return false
+	}
+	return true
 }
 
 // GetToolsStatus verifica se as IAs CLIs estão instaladas no PATH e os status de autenticação
@@ -488,7 +558,7 @@ func (a *App) ListAgentSessions(agent string) ([]agents.SessionInfo, error) {
 	a.executor.Mu.Lock()
 	session, ok := a.executor.ActiveSessions[sessionID]
 	a.executor.Mu.Unlock()
-	
+
 	if !ok {
 		return nil, fmt.Errorf("inicie o agente antes de listar o histórico")
 	}
@@ -511,7 +581,12 @@ func (a *App) NewAgentSession(agent string) error {
 }
 
 func (a *App) SendAgentInput(agent string, input string, images []map[string]string) error {
-	fmt.Printf("[App] SendAgentInput INVOCADO pela UI: agent=%s, input=%s, imagens=%d\n", agent, input, len(images))
+	// 🚨 Log Premium e Limpo
+	previewInput := input
+	if len(previewInput) > 60 {
+		previewInput = previewInput[:57] + "..."
+	}
+	fmt.Printf("[App] 📨 Sincronizando Mensagem >> Motor: %s | Preview: '%s'\n", agent, previewInput)
 
 	// 🚨 Idioma Dinâmico
 	lang := a.GetConfig().AgentLanguage
@@ -530,7 +605,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 			if err == nil && len(nodes) > 0 {
 				// 2. Navegação de Sinapses: Expandir o contexto seguindo os links neurais
 				fullContext := a.navigator.ExpandContext(a.ctx, nodes)
-				
+
 				contextInfo = "\n\n[CONHECIMENTO ORQUESTRADO (OBSIDIAN + SINAPSES)]\n"
 				for _, ctxPart := range fullContext {
 					contextInfo += ctxPart + "\n\n"
@@ -544,7 +619,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 
 	// Diretiva Técnica Dinâmica: Força o idioma em todos os canais (Resposta e Raciocínio).
 	directive := fmt.Sprintf("\n\n[SYSTEM DIRECTIVE: You MUST think, reason, and respond exclusively in %s. This applies to your 'Thought Channel' and your final response. DO NOT use English for internal reasoning. ORGANIZATION RULES: 1. Use clear Markdown headers (##). 2. Use horizontal rules (---) to separate major sections. 3. Keep paragraphs short (max 3 lines). 4. Use bold text for key terms.]", lang)
-	
+
 	// A Sinfonia Final: Contexto + Input + Diretiva
 	enhancedInput := contextInfo + "\n\nMENSAGEM DO USUÁRIO:\n" + input + directive
 
@@ -554,8 +629,8 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		fmt.Printf("[App] ERRO no SendAgentInput: %v\n", err)
 		return fmt.Errorf("erro ao enviar input para ACP: %v", err)
 	}
-	
-	fmt.Println("[App] Input enviado com sucesso ao canal RPC!")
+
+	fmt.Printf("[App] ✅ Sinfonia roteada para %s com sucesso via JSON-RPC!\n", agent)
 	return nil
 }
 
@@ -579,7 +654,7 @@ func (a *App) ResolveConflict(decision string, subject string, predicate string,
 	if decision == "new" {
 		// 1. Marcar o antigo como LEGADO
 		a.qdrant.SetPayload("knowledge_graph", oldID, map[string]interface{}{
-			"status": "legacy",
+			"status":      "legacy",
 			"archived_at": time.Now().Format(time.RFC3339),
 		})
 
@@ -604,7 +679,7 @@ func (a *App) ResolveConflict(decision string, subject string, predicate string,
 		}
 
 		a.qdrant.UpsertPoint("knowledge_graph", newID, vector, payload)
-		
+
 		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 			"source":  "RESOLVER",
 			"content": fmt.Sprintf("✅ Conflito resolvido: '%s' agora é a verdade sobre '%s'.", newValue, subject),
@@ -618,7 +693,6 @@ func (a *App) ResolveConflict(decision string, subject string, predicate string,
 
 	return "Conflito resolvido."
 }
-
 
 func (a *App) GetProjectDoc(name string) (string, error) {
 	fmt.Printf("[App] Lendo documentação: %s\n", name)
@@ -636,7 +710,7 @@ func (a *App) GetNodeDetails(nodeID string) (map[string]interface{}, error) {
 
 	// 1. Tentar buscar em Notas do Obsidian ou Sistema (Chave: name)
 	res, err := a.qdrant.SearchByField("obsidian_knowledge", "name", nodeID)
-	
+
 	// Fallback: Se não achar campo exato (slug mismatch), tentar busca similar textual
 	if err != nil || res == nil {
 		fmt.Printf("[Audit] Nó '%s' não encontrado por campo exato.\n", nodeID)
@@ -668,13 +742,13 @@ func (a *App) GetNodeDetails(nodeID string) (map[string]interface{}, error) {
 // AnalyzeGraphHealth analisa a integridade semântica do grafo.
 func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 	fmt.Println("[Audit] Analisando saúde do Grafo de Contexto...")
-	
+
 	// Busca pontos ativos no Qdrant (Simulação de Analytic do TrustGraph)
 	// Para um sistema real, faríamos um Scroll filtrando por status: active
 	// Aqui retornamos estatísticas baseadas na densidade atual
 	stats := map[string]interface{}{
-		"density": 0.85, // Exemplo: de cada 100 notas, 85 estão conectadas
-		"conflicts": 0,
+		"density":      0.85, // Exemplo: de cada 100 notas, 85 estão conectadas
+		"conflicts":    0,
 		"active_nodes": 0,
 	}
 
@@ -688,6 +762,7 @@ func (a *App) OpenFileInEditor(path string) error {
 	cmd := exec.Command("cmd", "/c", "start", "", path)
 	return cmd.Run()
 }
+
 // SendTerminalData envia input do usuário para o processo do terminal (stdin).
 func (a *App) SendTerminalData(agent string, data string) {
 	sessionID := "acp-session-" + agent
@@ -751,7 +826,7 @@ Você agora está sendo orquestrado pelo Lumaestro (Modo ACP).
 func (a *App) HandleNodeClick(nodeID string) {
 	if a.ranker != nil {
 		a.ranker.Reinforce(nodeID)
-		
+
 		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 			"source":  "NEURAL",
 			"content": fmt.Sprintf("🧠 Reforço sináptico aplicado ao nó: %s", nodeID),
@@ -783,7 +858,7 @@ func (a *App) IsExplorationMode() bool {
 func (a *App) AddMCPServer(name string, command string) string {
 	cmd := exec.Command("cmd", "/c", "gemini", "mcp", "add", name, command)
 	output, err := cmd.CombinedOutput()
-	
+
 	if err != nil {
 		return fmt.Sprintf("Erro ao adicionar MCP: %s\nOutput: %s", err.Error(), string(output))
 	}
@@ -794,7 +869,7 @@ func (a *App) AddMCPServer(name string, command string) string {
 func (a *App) ListMCPServers() string {
 	cmd := exec.Command("cmd", "/c", "gemini", "mcp", "list")
 	output, err := cmd.CombinedOutput()
-	
+
 	if err != nil {
 		return fmt.Sprintf("Erro ao listar MCPs: %s\nOutput: %s", err.Error(), string(output))
 	}
@@ -861,7 +936,7 @@ func (a *App) LoginGeminiAccount(name string) error {
 
 	// Script para o PowerShell forçar o ambiente de sessão desta conta
 	script := fmt.Sprintf(`$env:GEMINI_CLI_HOME='%s'; $env:NO_BROWSER='true'; & '%s' login`, targetDir, binaryPath)
-	
+
 	fmt.Printf("[Maestro] 🔑 Iniciando fluxo de Login OAuth para: %s\n", name)
 	return exec.Command("cmd", "/c", "start", "powershell", "-NoExit", "-Command", script).Run()
 }

@@ -274,18 +274,21 @@ const toggleExplorationMode = async () => {
         </div>
 
         <!-- SEÇÃO NEURAL -->
-        <div class="sec-card neural-sec" style="margin-top: 2rem; border-color: rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.05);">
+        <div class="sec-card neural-sec" style="margin-top: 3.5rem; margin-bottom: 4rem; border-color: rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.05); padding: 2rem 2.5rem; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
            <div class="sec-info">
               <h5 style="margin: 0; font-weight: 800; font-size: 1rem; color: #fff;">🧠 Modo de Exploração Neural</h5>
-              <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">
+              <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim); line-height: 1.5;">
                 Ativado: Mostra resultados brutos (similaridade pura).<br/>
                 Desativado: Prioriza notas que você acessa com frequência (Sinapses Fortes).
               </p>
            </div>
-           <label class="hybrid-toggle-maestro">
-              <input type="checkbox" v-model="isExplorationMode" @change="toggleExplorationMode" />
-              <span class="m-slider-sec" style="background: #4c1d95;"></span>
-           </label>
+           <div class="sec-toggle-wrapper" @click="isExplorationMode = !isExplorationMode; toggleExplorationMode()" style="align-self: center;">
+             <span v-if="isExplorationMode" class="sec-label-active" style="color: #a78bfa;">PURA (BRUTA) 🔍</span>
+             <span v-else class="sec-label-blocked" style="color: #f9a8d4; opacity: 0.9;">SINÁPTICA 🧠</span>
+             <div class="maestro-switch" :class="{'on': isExplorationMode}" :style="isExplorationMode ? 'border-color: #8b5cf6; box-shadow: 0 0 12px rgba(139, 92, 246, 0.4); background: rgba(139, 92, 246, 0.2);' : ''">
+               <div class="maestro-switch-thumb" :style="isExplorationMode ? 'background: #a78bfa;' : ''"></div>
+             </div>
+           </div>
         </div>
 
         <div class="premium-form-group">
@@ -409,19 +412,23 @@ const toggleExplorationMode = async () => {
                       </div>
                       <div>
                         <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.3rem; letter-spacing: 2px;">{{ tool.toUpperCase() }}</h4>
-                        <div class="engine-status-badge">
-                          <span class="status-dot"></span> OPERACIONAL
+                        <div class="engine-status-badge" :style="status.tools[tool] ? '' : 'border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.05);'">
+                          <span class="status-dot" :style="status.tools[tool] ? '' : 'background: #ef4444; box-shadow: none;'"></span> 
+                          {{ status.tools[tool] ? 'SISTEMA PRONTO' : 'NÃO INSTALADO' }}
                         </div>
                       </div>
                    </div>
                    
-                   <!-- Auto-Start integrado como Toggle de topo em coluna única com nowrap -->
-                   <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 4px;">
-                     <label class="hybrid-toggle-maestro" title="Ativar Auto-Start no Boot">
-                        <input type="checkbox" :checked="isAutoStart(tool)" @change="toggleAutoStart(tool)" />
-                        <span class="m-slider-sec" style="width: 44px; height: 22px;"></span>
-                     </label>
-                     <span style="font-size: 0.55rem; color: var(--p-text-dim); font-weight: 900; letter-spacing: 1px; white-space: nowrap;">AUTO-BOOT</span>
+                   <!-- Auto-Start Switch Claro e Imersivo -->
+                   <div class="auto-boot-container" @click="toggleAutoStart(tool)" title="Inicia o motor automaticamente assim que você abre o Lumaestro" style="flex-shrink: 0;">
+                     <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
+                       <span style="font-size: 0.65rem; color: var(--p-text-dim); font-weight: 900; letter-spacing: 1px; white-space: nowrap;">AUTO-BOOT</span>
+                       <div class="maestro-switch" :class="{ 'on': isAutoStart(tool) }">
+                         <div class="maestro-switch-thumb"></div>
+                       </div>
+                     </div>
+                     <span style="font-size: 0.55rem; color: #3b82f6; font-weight: bold; opacity: 0.9; align-self: flex-end; white-space: nowrap; margin-top: 4px;" v-if="isAutoStart(tool)">LIGA SOZINHO ⚡</span>
+                     <span style="font-size: 0.55rem; color: #64748b; font-weight: bold; opacity: 0.8; align-self: flex-end; white-space: nowrap; margin-top: 4px;" v-else>PARTIDA MANUAL ✋</span>
                    </div>
                 </div>
                 
@@ -460,22 +467,28 @@ const toggleExplorationMode = async () => {
         </div>
 
         <div class="accounts-grid-premium">
-          <div v-for="acc in config.gemini_accounts" :key="acc.name" class="profile-card" :class="{ 'active-profile': acc.active }">
-            <div class="profile-header" style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem;">
-              <div class="avatar-glow">{{ acc.name[0].toUpperCase() }}</div>
-              <div class="profile-meta">
-                <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.2rem;">{{ acc.name }}</h4>
-                <div class="status-chip" :style="{ color: acc.active ? 'var(--p-accent)' : '#475569' }">
+          <div v-for="acc in config.gemini_accounts" :key="acc.name" class="profile-card" :class="{ 'active-profile': acc.active }" style="display: flex; flex-direction: column;">
+            <div class="profile-header" style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2.5rem;">
+              <div class="avatar-glow" style="flex-shrink: 0;">{{ acc.name[0].toUpperCase() }}</div>
+              <div class="profile-meta" style="min-width: 0; flex: 1;">
+                <h4 style="margin: 0; font-weight: 900; color: #fff; font-size: 1.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="acc.name">{{ acc.name }}</h4>
+                <div class="status-chip" :style="{ color: acc.active ? 'var(--p-accent)' : '#64748b', background: acc.active ? 'rgba(59, 130, 246, 0.1)' : 'transparent', border: acc.active ? '1px solid rgba(59, 130, 246, 0.2)' : 'none', padding: acc.active ? '4px 8px' : '0', borderRadius: '12px', display: 'inline-block', marginTop: '6px', fontSize: '0.65rem', fontWeight: '900', letterSpacing: '1px' }">
                   {{ acc.active ? 'SESSÃO ATIVA' : 'MODO STANDBY' }}
                 </div>
               </div>
             </div>
             
-            <div class="profile-actions" style="display: flex; gap: 10px;">
-              <button @click="handleLoginAccount(acc.name)" class="btn-util" style="border-color: var(--p-accent); color: var(--p-accent);">LOGAR 🔑</button>
-              <button v-if="!acc.active" @click="handleSwitchAccount(acc.name)" class="btn-util" style="background: rgba(255,255,255,0.05);">ATIVAR</button>
-              <!-- Botão de Excluir (Opcional, mas melhora UX) -->
-              <button class="btn-util" style="flex: 0.4; border-color: rgba(239, 68, 68, 0.2); color: #ef4444;">×</button>
+            <div class="profile-actions" style="display: flex; gap: 12px; margin-top: auto;">
+              <button @click="handleLoginAccount(acc.name)" class="btn-util" style="border-color: rgba(59, 130, 246, 0.4); color: #3b82f6; background: rgba(59, 130, 246, 0.05);">
+                LOGAR 🔑
+              </button>
+              <button v-if="!acc.active" @click="handleSwitchAccount(acc.name)" class="btn-util" style="background: rgba(255,255,255,0.05);">
+                ATIVAR ⚡
+              </button>
+              <!-- Botão de Excluir Premium -->
+              <button class="btn-util btn-danger" style="flex: 0 0 50px; padding: 0;" title="Remover Identidade">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
             </div>
           </div>
         </div>
@@ -508,10 +521,20 @@ const toggleExplorationMode = async () => {
                    </p>
                 </div>
                 
-                <label class="hybrid-toggle-maestro">
-                  <input type="checkbox" v-model="config.security[key]" />
-                  <span class="m-slider-sec"></span>
-                </label>
+                <div class="sec-toggle-wrapper" @click="config.security[key] = !config.security[key]">
+                   <div class="maestro-switch" :class="{ 
+                     'on': config.security[key], 
+                     'critical-on': config.security[key] && (key === 'full_machine_access' || key === 'allow_run_commands' || key === 'allow_delete')
+                   }">
+                     <div class="maestro-switch-thumb" :class="{
+                       'critical-thumb': config.security[key] && (key === 'full_machine_access' || key === 'allow_run_commands' || key === 'allow_delete')
+                     }"></div>
+                   </div>
+                   <span v-if="config.security[key]" class="sec-label-active" :style="(key === 'full_machine_access' || key === 'allow_run_commands' || key === 'allow_delete') ? 'color: #ef4444;' : 'color: #22c55e;'">
+                     {{ (key === 'full_machine_access' || key === 'allow_run_commands') ? '⚠️ PERIGO' : 'ATIVO ✓' }}
+                   </span>
+                   <span v-else class="sec-label-blocked">🔒 BLOQUEADO</span>
+                 </div>
              </div>
          </div>
          <button @click="save" class="btn-glow-red" style="margin-top: 3rem; width: 100%;">
@@ -559,29 +582,31 @@ const toggleExplorationMode = async () => {
 
 <style scoped>
 /* --- SISTEMA DE DESIGN PREMIER --- */
-:root {
+.settings-view { 
   --p-bg: #030712;
   --p-accent: #3b82f6;
   --p-accent-glow: rgba(59, 130, 246, 0.4);
-  --p-glass: rgba(255, 255, 255, 0.02);
-  --p-border: rgba(255, 255, 255, 0.06);
+  --p-glass: rgba(255, 255, 255, 0.04);
+  --p-border: rgba(255, 255, 255, 0.08);
   --p-text: #f8fafc;
   --p-text-dim: #94a3b8;
   --p-error: #ef4444;
-}
 
-.settings-view { 
   padding: 4rem 6rem; 
   color: var(--p-text); 
   background: var(--p-bg); 
   background-image: 
     radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.05) 0px, transparent 50%),
     radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.05) 0px, transparent 50%);
-  min-height: 100vh;
+  background-attachment: fixed; /* Evita que o gradiente deforme no scroll */
+  
   width: 100%;
+  flex: 1 0 auto; /* Permite que o container expanda com o conteúdo num flex parent */
+  min-height: 100%;
+
   box-sizing: border-box;
   font-family: 'Outfit', 'Inter', sans-serif; 
-  overflow-y: visible; /* Mudança crucial para permitir scroll */
+  overflow: visible;
 }
 
 .brand-badge { 
@@ -604,6 +629,7 @@ const toggleExplorationMode = async () => {
   letter-spacing: -3px;
   background: linear-gradient(135deg, #fff 20%, #64748b 100%); 
   -webkit-background-clip: text; 
+  background-clip: text;
   color: transparent; 
   margin-bottom: 0.5rem; 
 }
@@ -715,24 +741,26 @@ const toggleExplorationMode = async () => {
 
 .maestro-range { 
   width: 100%; 
-  height: 8px; 
-  appearance: none; /* Lint Fix */
+  height: 6px; 
+  appearance: none;
   -webkit-appearance: none; 
-  background: rgba(255,255,255,0.05); 
-  border-radius: 20px; 
-  margin: 20px 0;
+  background: rgba(255,255,255,0.08); 
+  border-radius: 10px; 
+  margin: 15px 0;
   outline: none;
+  border: 1px solid rgba(255,255,255,0.02);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
 }
 
 .maestro-range::-webkit-slider-thumb { 
   -webkit-appearance: none; 
-  width: 24px; 
-  height: 24px; 
-  background: var(--p-accent); 
+  width: 22px; 
+  height: 22px; 
+  background: #3b82f6; 
   border-radius: 50%; 
   cursor: pointer;
-  box-shadow: 0 0 15px var(--p-accent-glow);
-  border: 3px solid #000;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5), inset 0 0 4px rgba(255,255,255,0.5);
+  border: 2px solid #000;
   transition: 0.3s;
 }
 
@@ -796,6 +824,53 @@ const toggleExplorationMode = async () => {
   background: #475569;
   border-radius: 50%;
   transition: 0.3s;
+}
+
+/* Novo Switch Explicito (Auto-Boot) */
+.auto-boot-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: 0.2s;
+}
+.auto-boot-container:hover {
+  background: rgba(255,255,255,0.02);
+  border-color: rgba(255,255,255,0.05);
+}
+
+.maestro-switch {
+  width: 38px; height: 20px;
+  background: #1e293b;
+  border-radius: 20px;
+  position: relative;
+  transition: 0.3s;
+  border: 1px solid rgba(255,255,255,0.05);
+  box-sizing: border-box;
+}
+
+.maestro-switch.on {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.2);
+}
+
+.maestro-switch-thumb {
+  width: 14px; height: 14px;
+  background: #64748b;
+  border-radius: 50%;
+  position: absolute; top: 2px; left: 2px;
+  transition: 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  box-sizing: border-box;
+}
+
+.maestro-switch.on .maestro-switch-thumb {
+  transform: translateX(18px);
+  background: #3b82f6;
 }
 
 .hybrid-toggle-maestro input:checked + .m-slider-sec { background: var(--p-accent); }
@@ -1040,5 +1115,58 @@ input:checked + .m-slider::before { transform: translateX(20px); background: #ff
   background: rgba(255,255,255,0.1);
   color: #fff;
   border-color: rgba(255,255,255,0.2);
+}
+
+/* --- Toggles de Segurança (Firewall) --- */
+.sec-toggle-wrapper {
+  display: flex; align-items: center; gap: 12px; cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 12px;
+  transition: background 0.2s;
+}
+.sec-toggle-wrapper:hover { background: rgba(255,255,255,0.03); }
+
+.sec-label-active { font-size: 0.7rem; font-weight: 900; letter-spacing: 1.5px; white-space: nowrap; }
+.sec-label-blocked { font-size: 0.7rem; font-weight: 900; color: #64748b; letter-spacing: 1.5px; opacity: 0.8; white-space: nowrap; }
+
+.maestro-switch.critical-on { background: rgba(239, 68, 68, 0.15); border-color: #ef4444; box-shadow: 0 0 12px rgba(239, 68, 68, 0.2); }
+.maestro-switch.on.critical-on .maestro-switch-thumb.critical-thumb { background: #ef4444; }
+
+/* Botões Utilitários (Cards de Login) */
+.btn-util {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1; /* Preenche o espaço igualitariamente */
+  letter-spacing: 1px;
+}
+
+.btn-util:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.btn-util.btn-danger {
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.btn-util.btn-danger:hover {
+  background: #ef4444;
+  color: #fff;
+  box-shadow: 0 5px 20px rgba(239, 68, 68, 0.4);
 }
 </style>

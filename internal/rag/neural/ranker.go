@@ -144,8 +144,6 @@ func (r *Ranker) IsExplorationMode() bool {
 // Chamado no boot para simular o esquecimento natural.
 func (r *Ranker) Decay() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	for id, current := range r.registry.Weights {
 		if current > 1.0 {
 			// Reduz a "energia" acima do nível base
@@ -158,6 +156,7 @@ func (r *Ranker) Decay() {
 			}
 		}
 	}
+	r.mu.Unlock() // Libera ANTES do save, porque r.save() adquire RLock (que causa deadlock se não liberado)
 	
 	fmt.Println("[Neural] 🧠 Esquecimento Natural processado (Decay).")
 	r.save()

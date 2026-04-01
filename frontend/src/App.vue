@@ -15,6 +15,11 @@ const currentView = ref('orchestrator') // views: orchestrator, settings
 const isOnline = ref(false)
 const connectionError = ref('Aguardando sincronização com o Maestro (Frontend Booting)...')
 
+// Estado de Boot — Diagnóstico Visual
+const bootStages = ref([])
+const isBooting = ref(true)
+const bootError = ref(null)
+
 // Painel redimensionável
 const chatWidth = ref(500)
 const isResizing = ref(false)
@@ -76,11 +81,34 @@ const startResize = (e) => {
 }
 
 onMounted(async () => {
+  // 🧠 Escuta o Diagnóstico de Boot (cada estágio do backend)
+  EventsOn('boot:stage', (data) => {
+    if (data.stage === 'error') {
+      bootError.value = data.message
+      return
+    }
+    // Evita duplicatas no HMR
+    if (!bootStages.value.find(s => s.stage === data.stage)) {
+      bootStages.value.push({ ...data, done: false })
+    }
+    // Marca estágio anterior como concluído
+    if (bootStages.value.length > 1) {
+      bootStages.value[bootStages.value.length - 2].done = true
+    }
+    // Quando o backend reporta 'ready', fecha o overlay com animação
+    if (data.stage === 'ready') {
+      bootStages.value[bootStages.value.length - 1].done = true
+      setTimeout(() => { isBooting.value = false }, 1500)
+    }
+  })
+
   // Verificar conexão inicial com diagnóstico visual
   try {
     isOnline.value = await CheckConnection()
     if (isOnline.value) {
       connectionError.value = "Maestro Online (Backend e Motor Vetorial Ativos)"
+      // Se já estava online (HMR/reload), pula o overlay
+      isBooting.value = false
     } else {
       connectionError.value = "Backend respondeu, mas Qdrant ou Configuração falharam. Verifique as configurações."
     }
@@ -141,6 +169,7 @@ onMounted(async () => {
 
 <template>
   <div class="lumaestro-app">
+
     <!-- Barra Lateral -->
     <aside class="sidebar glass">
       <div class="logo">LM</div>
@@ -188,6 +217,44 @@ onMounted(async () => {
 
         <aside class="glass chat-area" :style="{ width: chatWidth + 'px', minWidth: chatWidth + 'px' }">
           <ChatPanel />
+
+          <!-- 🚀 Overlay de Boot — Diagnóstico Visual (Movido para o Chat) -->
+          <Transition name="boot-fade">
+            <div v-if="isBooting" class="boot-overlay">
+              <div class="boot-card glass">
+                <div class="boot-logo-ring">
+                  <div class="boot-logo-pulse"></div>
+                  <span class="boot-logo-text">LM</span>
+                </div>
+                <h2 class="boot-title">Maestro está acordando...</h2>
+                <p class="boot-subtitle">Preparando os motores de inteligência artificial</p>
+
+                <div class="boot-stages">
+                  <TransitionGroup name="stage-list">
+                    <div
+                      v-for="s in bootStages"
+                      :key="s.stage"
+                      class="boot-stage"
+                      :class="{ done: s.done, active: !s.done }"
+                    >
+                      <span class="stage-icon">{{ s.icon }}</span>
+                      <span class="stage-msg">{{ s.message }}</span>
+                      <span class="stage-check" v-if="s.done">✓</span>
+                      <span class="stage-spinner" v-else></span>
+                    </div>
+                  </TransitionGroup>
+                </div>
+
+                <div v-if="bootError" class="boot-error">
+                  <span>🔴</span> {{ bootError }}
+                </div>
+
+                <p v-if="bootStages.length === 0" class="boot-waiting">
+                  Aguardando sinal do backend...
+                </p>
+              </div>
+            </div>
+          </Transition>
         </aside>
       </template>
 
@@ -309,6 +376,8 @@ nav button.active {
   flex-direction: column;
   flex-shrink: 0;
   transition: none;
+  position: relative; /* Necessário para conter o overlay de boot */
+  overflow: hidden; /* Mantém o overlay dentro dos cantos arredondados */
 }
 
 /* ── Resize Handle ── */
@@ -382,4 +451,162 @@ nav button.active {
   margin: 0 !important;
   transform: translateX(-40px);
 }
+
+/* ═══════════════════════════════════════════ */
+/*  BOOT OVERLAY — Diagnóstico Visual Premium  */
+/* ═══════════════════════════════════════════ */
+.boot-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 900; /* Abaixo do z-index global, mas acima do chat local */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(13, 17, 23, 0.97) 0%, rgba(13, 17, 23, 0.90) 100%);
+  backdrop-filter: blur(8px);
+  border-radius: inherit; /* Segue o arredondamento do chat-area */
+}
+
+.boot-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 2.5rem 2rem;
+  border-radius: 20px;
+  border: 1px solid rgba(79, 172, 254, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  min-width: 380px;
+  max-width: 450px;
+  box-shadow:
+    0 0 50px rgba(79, 172, 254, 0.05),
+    0 15px 45px rgba(0, 0, 0, 0.3);
+  transform: scale(0.95);
+}
+
+.boot-logo-ring {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.boot-logo-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(79, 172, 254, 0.3);
+  animation: boot-ring-spin 2s linear infinite;
+  border-top-color: #4facfe;
+}
+
+@keyframes boot-ring-spin {
+  to { transform: rotate(360deg); }
+}
+
+.boot-logo-text {
+  font-size: 1.8rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, #4facfe, #00f2fe);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 2px;
+}
+
+.boot-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.boot-subtitle {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.35);
+  margin: -0.5rem 0 0.5rem;
+  letter-spacing: 0.5px;
+}
+
+.boot-stages {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.boot-stage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.boot-stage.active {
+  border-color: rgba(79, 172, 254, 0.2);
+  background: rgba(79, 172, 254, 0.04);
+}
+
+.boot-stage.done {
+  opacity: 0.5;
+}
+
+.stage-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.stage-msg {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.stage-check {
+  color: #00e676;
+  font-weight: bold;
+  font-size: 0.85rem;
+}
+
+.stage-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(79, 172, 254, 0.2);
+  border-top-color: #4facfe;
+  border-radius: 50%;
+  animation: boot-ring-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.boot-error {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  font-size: 0.75rem;
+}
+
+.boot-waiting {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.25);
+  animation: pulse-op 1.5s infinite;
+}
+
+/* Transições */
+.boot-fade-enter-active { transition: opacity 0.3s ease; }
+.boot-fade-leave-active { transition: opacity 0.8s ease; }
+.boot-fade-enter-from,
+.boot-fade-leave-to { opacity: 0; }
+
+.stage-list-enter-active { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+.stage-list-enter-from { opacity: 0; transform: translateY(10px); }
 </style>
