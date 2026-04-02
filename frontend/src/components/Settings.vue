@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { GetConfig, SaveConfig, GetToolsStatus, InstallTool, SetupTool, AddGeminiAccount, SwitchGeminiAccount, LoginGeminiAccount, AddMCPServer, ListMCPServers } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 
@@ -219,6 +219,12 @@ const newAccName = ref('')
 
 const isExplorationMode = ref(false)
 
+const geminiKeyCount = computed(() => {
+  const raw = (config.value.gemini_api_key || '').trim()
+  if (!raw) return 0
+  return raw.split(',').filter(k => k.trim() !== '').length
+})
+
 const toggleExplorationMode = async () => {
   const res = await window.go.main.App.SetExplorationMode(isExplorationMode.value)
   console.log(res)
@@ -312,8 +318,22 @@ const toggleExplorationMode = async () => {
         </p>
         
         <div class="premium-form-group">
-          <label>Gemini API Key</label>
-          <input v-model="config.gemini_api_key" type="password" class="maestro-input" placeholder="••••••••" />
+          <label style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Gemini API Keys (Pool de Failover)</span>
+            <span v-if="geminiKeyCount > 0" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; padding: 3px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 900; letter-spacing: 1px;">
+              {{ geminiKeyCount }} CHAVE{{ geminiKeyCount > 1 ? 'S' : '' }} 🔑
+            </span>
+          </label>
+          <textarea 
+            v-model="config.gemini_api_key" 
+            class="maestro-input" 
+            placeholder="AIzaSy...chave1, AIzaSy...chave2, AIzaSy...chave3"
+            rows="3"
+            style="resize: vertical; font-family: monospace; font-size: 0.85rem; line-height: 1.6;"
+          ></textarea>
+          <p style="color: var(--p-text-dim); font-size: 0.7rem; margin-top: 0.5rem; opacity: 0.7;">
+            💡 Separe múltiplas chaves por <b style="color: #3b82f6;">vírgula</b>. Se uma chave atingir o limite de quota, o sistema pula automaticamente para a próxima.
+          </p>
         </div>
 
         <div class="premium-form-group">

@@ -246,8 +246,8 @@ func (e *Executor) SendInput(sessionID string, input string) error {
 			cmd.Env = os.Environ()
 			cfg, errConfig := config.Load()
 			if errConfig == nil && cfg != nil {
-				if cfg.GeminiAPIKey != "" && cfg.UseGeminiAPIKey {
-					cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+cfg.GeminiAPIKey)
+				if cfg.GetActiveGeminiKey() != "" && cfg.UseGeminiAPIKey {
+					cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+cfg.GetActiveGeminiKey())
 				}
 				if cfg.ClaudeAPIKey != "" && cfg.UseClaudeAPIKey {
 					cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+cfg.ClaudeAPIKey)
@@ -395,8 +395,8 @@ func (e *Executor) ExecuteCLI(ctx context.Context, agent string, contextData str
 	cmd.Env = os.Environ()
 	cfg, errConfig := config.Load()
 	if errConfig == nil && cfg != nil {
-		if cfg.GeminiAPIKey != "" && cfg.UseGeminiAPIKey {
-			cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+cfg.GeminiAPIKey)
+		if cfg.GetActiveGeminiKey() != "" && cfg.UseGeminiAPIKey {
+			cmd.Env = append(cmd.Env, "GEMINI_API_KEY="+cfg.GetActiveGeminiKey())
 		}
 		if cfg.ClaudeAPIKey != "" && cfg.UseClaudeAPIKey {
 			cmd.Env = append(cmd.Env, "ANTHROPIC_API_KEY="+cfg.ClaudeAPIKey)

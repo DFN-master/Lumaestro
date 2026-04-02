@@ -90,7 +90,7 @@ func (a *App) bootSequence() {
 	a.injectContexts()
 
 	// 🚀 Auto-Start: Inicia os agentes e sincroniza conhecimento
-	if a.config != nil && a.config.GeminiAPIKey != "" {
+	if a.config != nil && a.config.GetActiveGeminiKey() != "" {
 		fmt.Println("[BOOT] Maestro Online. Sincronizando conhecimento e restaurando agentes...")
 		
 		// 1. Inicia o Agente Padrão (Se configurado para auto-start)
@@ -155,7 +155,7 @@ func (a *App) initServices() error {
 
 	fmt.Println("[App] 🧬 Inicializando motor de Embeddings (Gemini)...")
 	a.emitBoot("embeddings", "🧬", "Inicializando motor de Embeddings (Gemini)...")
-	emb, err := provider.NewEmbeddingService(a.ctx, cfg.GeminiAPIKey)
+	emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
 	if err != nil {
 		fmt.Printf("🔴 FALHA CRÍTICA: Motor de Embeddings não iniciou: %v\n", err)
 		a.emitBoot("error", "🔴", "Motor de Embeddings falhou: "+err.Error())

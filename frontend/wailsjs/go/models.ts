@@ -77,6 +77,7 @@ export namespace config {
 	    qdrant_api_key: string;
 	    gemini_api_key: string;
 	    use_gemini_api_key: boolean;
+	    gemini_key_index: number;
 	    gemini_accounts: GeminiAccount[];
 	    claude_api_key: string;
 	    use_claude_api_key: boolean;
@@ -99,6 +100,7 @@ export namespace config {
 	        this.qdrant_api_key = source["qdrant_api_key"];
 	        this.gemini_api_key = source["gemini_api_key"];
 	        this.use_gemini_api_key = source["use_gemini_api_key"];
+	        this.gemini_key_index = source["gemini_key_index"];
 	        this.gemini_accounts = this.convertValues(source["gemini_accounts"], GeminiAccount);
 	        this.claude_api_key = source["claude_api_key"];
 	        this.use_claude_api_key = source["use_claude_api_key"];

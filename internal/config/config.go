@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // SecurityConfig define as permissões granulares para a IA
@@ -31,8 +32,9 @@ type Config struct {
 	ObsidianVaultPath string         `json:"obsidian_vault_path"`
 	QdrantURL         string         `json:"qdrant_url"`
 	QdrantAPIKey      string         `json:"qdrant_api_key"`
-	GeminiAPIKey      string         `json:"gemini_api_key"` // Legado (Manter para migração)
+	GeminiAPIKey      string         `json:"gemini_api_key"` // Aceita múltiplas chaves separadas por vírgula
 	UseGeminiAPIKey   bool           `json:"use_gemini_api_key"`
+	GeminiKeyIndex    int            `json:"gemini_key_index"` // Índice da chave ativa no pool
 	GeminiAccounts    []GeminiAccount `json:"gemini_accounts"` // 🌟 Nova lista de contas
 	ClaudeAPIKey      string         `json:"claude_api_key"`
 	UseClaudeAPIKey   bool           `json:"use_claude_api_key"`
@@ -43,6 +45,51 @@ type Config struct {
 	GraphNeighborLimit int            `json:"graph_neighbor_limit"` // Máximo de vizinhos por nó (padrão: 5)
 	GraphContextLimit int            `json:"graph_context_limit"` // Limite de chars do contexto expandido (padrão: 4000)
 	Security          SecurityConfig `json:"security"`
+}
+
+// GetGeminiKeys retorna a lista de chaves API do Gemini (split por vírgula).
+func (c *Config) GetGeminiKeys() []string {
+	raw := strings.TrimSpace(c.GeminiAPIKey)
+	if raw == "" {
+		return nil
+	}
+	var keys []string
+	for _, k := range strings.Split(raw, ",") {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
+// GetActiveGeminiKey retorna a chave API ativa do pool (com base no índice atual).
+func (c *Config) GetActiveGeminiKey() string {
+	keys := c.GetGeminiKeys()
+	if len(keys) == 0 {
+		return ""
+	}
+	idx := c.GeminiKeyIndex % len(keys)
+	return keys[idx]
+}
+
+// RotateGeminiKey avança para a próxima chave no pool e persiste a mudança.
+// Retorna a nova chave ativa ou "" se não houver mais chaves.
+func (c *Config) RotateGeminiKey() string {
+	keys := c.GetGeminiKeys()
+	if len(keys) <= 1 {
+		return c.GetActiveGeminiKey() // Sem rotação possível
+	}
+	c.GeminiKeyIndex = (c.GeminiKeyIndex + 1) % len(keys)
+	// Persiste o novo índice
+	Save(*c)
+	fmt.Printf("[KeyPool] 🔄 Rotação de chave Gemini: Agora usando chave #%d de %d\n", c.GeminiKeyIndex+1, len(keys))
+	return keys[c.GeminiKeyIndex]
+}
+
+// GeminiKeyCount retorna quantas chaves estão no pool.
+func (c *Config) GeminiKeyCount() int {
+	return len(c.GetGeminiKeys())
 }
 
 func getConfigPath() string {

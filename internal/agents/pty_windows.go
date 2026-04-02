@@ -81,8 +81,8 @@ func StartConPTY(command string, args []string, cols, rows int) (*ConPTYSession,
 
 	cfg, errConfig := config.Load()
 	if errConfig == nil && cfg != nil {
-		if cfg.GeminiAPIKey != "" && cfg.UseGeminiAPIKey {
-			env = append(env, "GEMINI_API_KEY="+cfg.GeminiAPIKey)
+		if cfg.GetActiveGeminiKey() != "" && cfg.UseGeminiAPIKey {
+			env = append(env, "GEMINI_API_KEY="+cfg.GetActiveGeminiKey())
 		}
 		if cfg.ClaudeAPIKey != "" && cfg.UseClaudeAPIKey {
 			env = append(env, "ANTHROPIC_API_KEY="+cfg.ClaudeAPIKey)

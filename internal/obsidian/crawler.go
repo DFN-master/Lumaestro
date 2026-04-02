@@ -255,7 +255,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		if err == nil {
 			textContent = desc
 			triples = tri
-			}
+		}
 	}
 
 	// ══════════════════════════════════════════════════════════
