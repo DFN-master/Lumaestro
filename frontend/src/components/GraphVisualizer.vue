@@ -389,10 +389,36 @@ const currentConflict = ref(null)
 onMounted(() => {
   initGraph()
   
+  // Sincroniza todos os nós conhecidos do banco de dados na partida
+  if (window.go && window.go.main && window.go.main.App) {
+    window.go.main.App.SyncAllNodes()
+  }
+  
   // Listener de Conflitos do Agente Validador
   window.runtime.EventsOn("graph:conflict", (conflict) => {
     currentConflict.value = conflict
     console.warn("⚠️ CONFLITO DETECTADO:", conflict)
+  })
+
+  // 🪐 Ouvinte de Novos Nós (Nós individuais/Isolados)
+  window.runtime.EventsOn("graph:node", (node) => {
+    if (!Graph || !node?.id) return
+    
+    const { nodes, links } = Graph.graphData()
+    
+    // Evita duplicatas (se o nó já existe, não precisamos fazer nada)
+    const exists = nodes.find(n => n.id === node.id)
+    if (exists) return
+
+    // Adiciona o novo nó ao motor físico
+    nodes.push({
+      id: node.id,
+      name: node.name || node.id,
+      "document-type": node["document-type"] || "chunk",
+      virtual: false // Nós vindos do backend como 'node' são reais
+    })
+
+    Graph.graphData({ nodes, links })
   })
 
   // 🕸️ Ouvinte de Arestas Dinâmicas (Streaming de Conexões)
@@ -685,7 +711,7 @@ const triggerScan = async () => {
           <button @click="triggerScan" class="action-btn" :class="{'scanning-btn': scanning}" title="Sincronização Rápida"><span v-if="!scanning">🔄</span><span v-else class="spin">⏳</span><span>SCAN</span></button>
         </div>
         <div class="stat-item">
-          <span class="val">{{ nodes.length }}</span>
+          <span class="val">{{ graphHealth.active_nodes || nodes.length }}</span>
           <span class="lab">NOTAS</span>
         </div>
       </div>

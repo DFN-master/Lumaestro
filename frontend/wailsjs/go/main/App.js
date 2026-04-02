@@ -153,3 +153,11 @@ export function SubmitReview(arg1, arg2) {
 export function SwitchGeminiAccount(arg1) {
   return window['go']['main']['App']['SwitchGeminiAccount'](arg1);
 }
+
+export function SyncAllNodes() {
+  return window['go']['main']['App']['SyncAllNodes']();
+}
+
+export function WeaveNeuralLinks(arg1) {
+  return window['go']['main']['App']['WeaveNeuralLinks'](arg1);
+}

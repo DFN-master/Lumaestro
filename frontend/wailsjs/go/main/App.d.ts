@@ -78,3 +78,7 @@ export function StopAgentSession(arg1:string):Promise<void>;
 export function SubmitReview(arg1:string,arg2:boolean):Promise<void>;
 
 export function SwitchGeminiAccount(arg1:string):Promise<void>;
+
+export function SyncAllNodes():Promise<void>;
+
+export function WeaveNeuralLinks(arg1:number):Promise<void>;

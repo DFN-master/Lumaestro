@@ -3,9 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"Lumaestro/internal/config"
+	"Lumaestro/internal/utils"
 
 	"google.golang.org/genai"
 )
@@ -57,16 +57,6 @@ func (s *EmbeddingService) rotateAndRetry() bool {
 	return true
 }
 
-// isQuotaError verifica se o erro é de quota/rate limit (deve rotacionar).
-func isQuotaError(err error) bool {
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "429") ||
-		strings.Contains(msg, "quota") ||
-		strings.Contains(msg, "rate limit") ||
-		strings.Contains(msg, "resource exhausted") ||
-		strings.Contains(msg, "too many requests")
-}
-
 // GenerateEmbedding transforma um texto em um vetor []float32.
 // Em caso de erro de quota, rotaciona automaticamente para a próxima chave do pool.
 func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) ([]float32, error) {
@@ -81,7 +71,7 @@ func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) (
 	res, err := s.Client.Models.EmbedContent(ctx, "gemini-embedding-2-preview", contents, nil)
 	if err != nil {
 		// Tenta rotacionar se for erro de quota
-		if isQuotaError(err) {
+		if utils.IsQuotaError(err) {
 			fmt.Printf("[KeyPool] ⚠️ Chave exausta (quota). Tentando próxima...\n")
 
 			cfg, _ := config.Load()
@@ -98,10 +88,10 @@ func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) (
 				if err == nil {
 					break
 				}
-				if !isQuotaError(err) {
+				if !utils.IsQuotaError(err) {
 					return nil, fmt.Errorf("erro ao gerar embedding (pós-rotação): %w", err)
 				}
-				fmt.Printf("[KeyPool] ⚠️ Chave #%d também exausta. Tentando próxima...\n", i+2)
+				fmt.Printf("[KeyPool] ⚠️ Chave #%d também exausta: %s\n", i+2, utils.FormatGenAIError(err))
 			}
 
 			if err != nil {

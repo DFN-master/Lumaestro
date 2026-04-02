@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"Lumaestro/internal/config"
+	"Lumaestro/internal/utils"
 
 	"google.golang.org/genai"
 )
@@ -34,11 +36,38 @@ type Relation struct {
 // OntologyService gerencia a extração de fatos estruturados.
 type OntologyService struct {
 	GenAI *genai.Client
+	ctx   context.Context
 }
 
-// NewOntologyService inicializa o serviço com o cliente Gemini.
-func NewOntologyService(client *genai.Client) *OntologyService {
-	return &OntologyService{GenAI: client}
+// NewOntologyService inicializa o serviço com o cliente Gemini e o contexto.
+func NewOntologyService(ctx context.Context, client *genai.Client) *OntologyService {
+	return &OntologyService{GenAI: client, ctx: ctx}
+}
+
+// rotateAndRetry tenta rotacionar a chave e recriar o client.
+func (s *OntologyService) rotateAndRetry() bool {
+	cfg, err := config.Load()
+	if err != nil || cfg == nil || cfg.GeminiKeyCount() <= 1 {
+		return false
+	}
+
+	newKey := cfg.RotateGeminiKey()
+	if newKey == "" {
+		return false
+	}
+
+	newClient, err := genai.NewClient(s.ctx, &genai.ClientConfig{
+		APIKey:  newKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		fmt.Printf("[KeyPool-Ontology] ❌ Falha ao rotacionar chave: %v\n", err)
+		return false
+	}
+
+	s.GenAI = newClient
+	fmt.Printf("[KeyPool-Ontology] ✅ Client rotacionado com sucesso.\n")
+	return true
 }
 
 // ExtractTriples extrai fatos estruturados de um texto usando o prompt TrustGraph, com suporte a desambiguação.
@@ -64,7 +93,29 @@ Texto:
 
 	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("erro na extração de ontologia: %w", err)
+		if utils.IsQuotaError(err) {
+			fmt.Printf("[KeyPool-Ontology] ⚠️ Cota esgotada na extração. Rotacionando...\n")
+			cfg, _ := config.Load()
+			maxRetries := 0
+			if cfg != nil {
+				maxRetries = cfg.GeminiKeyCount() - 1
+			}
+
+			for i := 0; i < maxRetries; i++ {
+				if !s.rotateAndRetry() {
+					break
+				}
+				res, err = s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
+				if err == nil {
+					break
+				}
+				fmt.Printf("[KeyPool-Ontology] ⚠️ Chave #%d também exausta: %s\n", i+2, utils.FormatGenAIError(err))
+			}
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("erro na extração de ontologia: %w", err)
+		}
 	}
 
 	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
@@ -90,7 +141,14 @@ Decisão:`, oldFact, newFact, contextStr)
 
 	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
 	if err != nil {
-		return "CONFLICT", err
+		if utils.IsQuotaError(err) {
+			if s.rotateAndRetry() {
+				res, err = s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
+			}
+		}
+		if err != nil {
+			return "CONFLICT", err
+		}
 	}
 
 	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
@@ -125,7 +183,14 @@ Formato:
 
 	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", contents, nil)
 	if err != nil {
-		return "", nil, fmt.Errorf("erro no processamento multimodal: %w", err)
+		if utils.IsQuotaError(err) {
+			if s.rotateAndRetry() {
+				res, err = s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", contents, nil)
+			}
+		}
+		if err != nil {
+			return "", nil, fmt.Errorf("erro no processamento multimodal: %w", err)
+		}
 	}
 
 	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {

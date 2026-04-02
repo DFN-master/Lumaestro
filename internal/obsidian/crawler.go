@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"Lumaestro/internal/provider"
+	"Lumaestro/internal/utils"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -185,29 +186,29 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 	c.mu.Unlock()
 
 	nodeName := strings.TrimSuffix(info.Name(), ext)
+	nodeID := strings.ToLower(nodeName) // Normalização para compatibilidade de links
 
 	// Lógica de Cache (Aumenta performance do Boot)
 	if exists && lastMod == info.ModTime().Unix() {
 		fmt.Printf("[Crawler] 💨 Pulando (Cache Válido): %s\n", nodeName)
 		runtime.EventsEmit(ctx, "graph:node", map[string]string{
-			"id":            nodeName,
+			"id":            nodeID,
 			"name":          nodeName,
 			"document-type": forcedDocType,
 		})
 		content, err := os.ReadFile(path)
 		if err == nil {
 			linkCounts := make(map[string]int)
-			matches := linkRegex.FindAllStringSubmatch(string(content), -1)
-			for _, m := range matches {
-				if len(m) > 1 {
-					linkCounts[strings.TrimSpace(m[1])]++
-				}
+			links := extractLinks(string(content))
+			for _, l := range links {
+				targetID := strings.ToLower(l)
+				linkCounts[targetID]++
 			}
-			for link, count := range linkCounts {
+			for target, weight := range linkCounts {
 				runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
-					"source": nodeName, 
-					"target": link,
-					"weight": count,
+					"source": nodeID, 
+					"target": target,
+					"weight": weight,
 				})
 			}
 		}
@@ -232,7 +233,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 		contextHint := fmt.Sprintf("Arquivo: %s. Contexto inicial: %s", nodeName, firstLines(textContent, 500))
 		triples, err = c.Ontology.ExtractTriples(ctx, textContent, contextHint)
 		if err != nil {
-			fmt.Printf("[Crawler] ⚠️ Erro ao extrair triplas de %s: %v\n", nodeName, err)
+			fmt.Printf("[Crawler] ⚠️ Erro ao extrair triplas de %s: %s\n", nodeName, utils.FormatGenAIError(err))
 		} else {
 			fmt.Printf("[Crawler] 🧠 %d Triplas extraídas de %s\n", len(triples), nodeName)
 		}
@@ -260,12 +261,9 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 
 	// ══════════════════════════════════════════════════════════
 	// PASSO 1: FEEDBACK VISUAL IMEDIATO (Independente de API)
-	// Emitimos o nó e suas conexões wiki-link ANTES de chamar
-	// qualquer API externa. Isso garante que o Grafo 3D SEMPRE
-	// mostre a topologia mesmo com cota esgotada (429).
 	// ══════════════════════════════════════════════════════════
 	runtime.EventsEmit(c.ctx, "graph:node", map[string]string{
-		"id":            nodeName,
+		"id":            nodeID,
 		"name":          nodeName,
 		"document-type": forcedDocType,
 	})
@@ -273,20 +271,22 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 	// Conta links Obsidian [[wiki-links]] (100% offline, sem API)
 	linkCounts := make(map[string]int)
 	for _, l := range links {
-		linkCounts[l]++
+		targetID := strings.ToLower(l)
+		linkCounts[targetID]++
 	}
 
 	// Adiciona peso das triplas semânticas extraídas pela IA (se houver)
 	for _, t := range triples {
 		if t.Object != "" && len(t.Object) < 50 { 
-			linkCounts[t.Object]++
+			targetID := strings.ToLower(t.Object)
+			linkCounts[targetID]++
 		}
 	}
 
 	// Emite TODAS as arestas imediatamente para o frontend
 	for target, weight := range linkCounts {
 		runtime.EventsEmit(c.ctx, "graph:edge", map[string]interface{}{
-			"source": nodeName, 
+			"source": nodeID, 
 			"target": target,
 			"weight": weight,
 		})
@@ -301,7 +301,7 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 	// ══════════════════════════════════════════════════════════
 	vector, err := c.Embedder.GenerateEmbedding(ctx, textContent)
 	if err != nil {
-		fmt.Printf("[Crawler] ⚠️ Embedding falhou para %s (API indisponível): %v\n", nodeName, err)
+		fmt.Printf("[Crawler] ⚠️ Embedding falhou para %s (API indisponível): %s\n", nodeName, utils.FormatGenAIError(err))
 		// Mesmo sem embedding, atualizamos o cache para não re-processar
 		// links visuais. O próximo SCAN com API disponível fará o embedding.
 		return true, nil

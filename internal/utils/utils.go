@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -171,4 +172,53 @@ func LogAIPerformance(model string, duration time.Duration, points int) {
 		fmt.Fprintf(stdout, "    • %s\n", color(Dim, "Modelo sob alta carga (Busy)"))
 		LogInfo("Tentando otimizar próxima chamada...", "🔄")
 	}
+}
+
+var (
+	modelRegex = regexp.MustCompile(`(?i)model:\s*([\w\.\-]+)`)
+	retryRegex = regexp.MustCompile(`(?i)retry\s+in\s+([\d\.]+\w+)`)
+)
+
+// IsQuotaError verifica se o erro é relacionado a limites de API ou exaustão de cota.
+func IsQuotaError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "429") ||
+		strings.Contains(msg, "quota") ||
+		strings.Contains(msg, "resource_exhausted") ||
+		strings.Contains(msg, "rate limit") ||
+		strings.Contains(msg, "too many requests")
+}
+
+// FormatGenAIError transforma os erros verbosos do Google GenAI em logs concisos e amigáveis.
+func FormatGenAIError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	if !IsQuotaError(err) {
+		msg := err.Error()
+		if len(msg) > 100 {
+			return msg[:97] + "..."
+		}
+		return msg
+	}
+
+	msg := err.Error()
+	// Extração de metadados via Regex para erro 429
+	model := "modelo desconhecido"
+	if m := modelRegex.FindStringSubmatch(msg); len(m) > 1 {
+		model = m[1]
+	}
+
+	retry := ""
+	if r := retryRegex.FindStringSubmatch(msg); len(r) > 1 {
+		retry = " Tente em " + r[1] + "."
+	}
+
+	// Limpeza de URLs e metadados brutos (Details: [map...])
+	// Focamos no que importa para o usuário
+	return fmt.Sprintf("[Gemini 429] Cota excedida para '%s'.%s", model, retry)
 }

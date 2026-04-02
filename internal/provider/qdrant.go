@@ -445,3 +445,45 @@ func (c *QdrantClient) GetPoints(collection string, ids []uint64) ([]map[string]
 
 	return outputs, nil
 }
+
+// CountPoints retorna o número total de pontos em uma coleção.
+func (c *QdrantClient) CountPoints(collection string) (int, error) {
+	url := fmt.Sprintf("%s/collections/%s", c.BaseURL, collection)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, err
+	}
+	if c.APIKey != "" {
+		req.Header["api-key"] = []string{c.APIKey}
+		req.Header.Set("Api-Key", c.APIKey)
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("erro ao obter estatísticas da coleção %s: status %d", collection, resp.StatusCode)
+	}
+
+	var result struct {
+		Result struct {
+			PointsCount int `json:"points_count"`
+			VectorsCount int `json:"vectors_count"`
+		} `json:"result"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, err
+	}
+
+	return result.Result.PointsCount, nil
+}
