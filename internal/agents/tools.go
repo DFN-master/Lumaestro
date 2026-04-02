@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"Lumaestro/internal/agents/skills"
+	_ "Lumaestro/internal/agents/skills/loader"
 	"Lumaestro/internal/config"
 )
 
@@ -154,10 +156,22 @@ func NewToolRegistry() *ToolRegistry {
 				return "", err
 			}
 			file, _ := args["file"].(string)
+			vaultPath, _ := args["path"].(string)
 			if file == "" {
 				return "", fmt.Errorf("argumento 'file' é obrigatório")
 			}
-			return runObsidianCLI("backlinks", "file="+file)
+			var backlinks []string
+			filepath.WalkDir(vaultPath, func(p string, d fs.DirEntry, err error) error {
+				if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+					return nil
+				}
+				content, _ := os.ReadFile(p)
+				if strings.Contains(string(content), "[["+file+"]]") {
+					backlinks = append(backlinks, d.Name())
+				}
+				return nil
+			})
+			return fmt.Sprintf("Notas que linkam para '%s': %v", file, backlinks), nil
 		},
 	}
 
@@ -185,6 +199,42 @@ func NewToolRegistry() *ToolRegistry {
 				return nil
 			})
 			return fmt.Sprintf("Tags encontradas: %v", tags), nil
+		},
+	}
+
+	// ─────────────────────────────────────────────────
+	// 🧠 SKILLS NATIVAS (Arsenal Go)
+	// ─────────────────────────────────────────────────
+
+	r.Tools["GetSkill"] = Tool{
+		Name:        "GetSkill",
+		Description: "Recupera as instruções de uma habilidade do arsenal nativo Go. Args: name (ex: 'brainstorming').",
+		Function: func(args map[string]interface{}) (string, error) {
+			name, _ := args["name"].(string)
+			if name == "" {
+				return "", fmt.Errorf("argumento 'name' é obrigatório")
+			}
+			return skills.GetSkill(name)
+		},
+	}
+
+	r.Tools["SearchSkills"] = Tool{
+		Name:        "SearchSkills",
+		Description: "Busca nomes de habilidades disponíveis no catálogo nativo. Args: query.",
+		Function: func(args map[string]interface{}) (string, error) {
+			query, _ := args["query"].(string)
+			all := skills.ListSkills()
+			if query == "" {
+				return fmt.Sprintf("Habilidades disponíveis (%d): %v", len(all), all), nil
+			}
+			
+			var matches []string
+			for _, s := range all {
+				if strings.Contains(strings.ToLower(s), strings.ToLower(query)) {
+					matches = append(matches, s)
+				}
+			}
+			return fmt.Sprintf("Skills encontradas para '%s' (%d): %v", query, len(matches), matches), nil
 		},
 	}
 
