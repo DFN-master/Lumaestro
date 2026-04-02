@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"Lumaestro/internal/config"
 	"Lumaestro/internal/utils"
-
-	"google.golang.org/genai"
 )
+
+// Prompter define a interface necessária para realizar consultas ao agente local.
+type Prompter interface {
+	AskSync(sessionID string, prompt string, images []map[string]string) (string, error)
+}
 
 // Triple representa a unidade básica de conhecimento semântico.
 type Triple struct {
@@ -33,47 +35,22 @@ type Relation struct {
 	Predicate string `json:"predicate"`
 }
 
-// OntologyService gerencia a extração de fatos estruturados.
+// OntologyService gerencia a extração de fatos estruturados via ACP (Agente Local).
 type OntologyService struct {
-	GenAI *genai.Client
-	ctx   context.Context
+	Prompter  Prompter
+	SessionID string
+	ctx       context.Context
 }
 
-// NewOntologyService inicializa o serviço com o cliente Gemini e o contexto.
-func NewOntologyService(ctx context.Context, client *genai.Client) *OntologyService {
-	return &OntologyService{GenAI: client, ctx: ctx}
+// NewOntologyService inicializa o serviço com um Prompter (ex: ACPExecutor) e o ID da sessão.
+func NewOntologyService(ctx context.Context, prompter Prompter, sessionID string) *OntologyService {
+	return &OntologyService{Prompter: prompter, SessionID: sessionID, ctx: ctx}
 }
 
-// rotateAndRetry tenta rotacionar a chave e recriar o client.
-func (s *OntologyService) rotateAndRetry() bool {
-	cfg, err := config.Load()
-	if err != nil || cfg == nil || cfg.GeminiKeyCount() <= 1 {
-		return false
-	}
-
-	newKey := cfg.RotateGeminiKey()
-	if newKey == "" {
-		return false
-	}
-
-	newClient, err := genai.NewClient(s.ctx, &genai.ClientConfig{
-		APIKey:  newKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		fmt.Printf("[KeyPool-Ontology] ❌ Falha ao rotacionar chave: %v\n", err)
-		return false
-	}
-
-	s.GenAI = newClient
-	fmt.Printf("[KeyPool-Ontology] ✅ Client rotacionado com sucesso.\n")
-	return true
-}
-
-// ExtractTriples extrai fatos estruturados de um texto usando o prompt TrustGraph, com suporte a desambiguação.
+// ExtractTriples extrai fatos estruturados usando o Agente ACP (Gemini CLI).
 func (s *OntologyService) ExtractTriples(ctx context.Context, text string, contextHint string) ([]Triple, error) {
 	prompt := fmt.Sprintf(`Extraia triplas semânticas (Sujeito-Predicado-Objeto) do texto abaixo.
-Retorne APENAS um ARRAY JSON puro. NÃO use wrappers como {"triples": [...]}.
+Retorne APENAS um ARRAY JSON puro. NÃO use tags de markdown e NÃO use wrappers como {"triples": [...]}.
 Exemplo exato do formato esperado:
 [
   {"subject": "Lumaestro", "predicate": "uses", "object": "Qdrant"}
@@ -91,43 +68,18 @@ Use esta informação para resolver pronomes como "ele", "ela", "o projeto", "a 
 Texto:
 %s`, contextHint, text)
 
-	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
+	response, err := s.Prompter.AskSync(s.SessionID, prompt, nil)
 	if err != nil {
-		if utils.IsQuotaError(err) {
-			fmt.Printf("[KeyPool-Ontology] ⚠️ Cota esgotada na extração. Rotacionando...\n")
-			cfg, _ := config.Load()
-			maxRetries := 0
-			if cfg != nil {
-				maxRetries = cfg.GeminiKeyCount() - 1
-			}
-
-			for i := 0; i < maxRetries; i++ {
-				if !s.rotateAndRetry() {
-					break
-				}
-				res, err = s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
-				if err == nil {
-					break
-				}
-				fmt.Printf("[KeyPool-Ontology] ⚠️ Chave #%d também exausta: %s\n", i+2, utils.FormatGenAIError(err))
-			}
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("erro na extração de ontologia: %w", err)
-		}
+		return nil, fmt.Errorf("falha na extração ACP: %w", err)
 	}
 
-	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
-		return parseTriples(fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0]))
-	}
-	return nil, nil
+	return parseTriples(response)
 }
 
-// ValidateConflict atua como o "Agente da Verdade", decidindo entre informações contraditórias.
+// ValidateConflict decide entre informações contraditórias usando o Agente ACP.
 func (s *OntologyService) ValidateConflict(ctx context.Context, oldFact, newFact, contextStr string) (string, error) {
-	prompt := fmt.Sprintf(`Você é o Agente Validador de Verdade do Lumaestro.
-Detectamos um conflito de informação no Grafo de Conhecimento.
+	prompt := fmt.Sprintf(`Você é o Agente Validador de Verdade.
+Detectamos um conflito no Grafo de Conhecimento.
 
 FATO ANTIGO: %s
 FATO NOVO: %s
@@ -135,76 +87,52 @@ CONTEXTO RECENTE: %s
 
 Sua tarefa:
 Responda APENAS "UPDATE" se o Fato Novo for claramente uma atualização ou correção válida.
-Responda APENAS "CONFLICT" se houver dúvida real ou se as informações forem contraditórias sem uma justificativa clara.
+Responda APENAS "CONFLICT" se houver dúvida real.
 
 Decisão:`, oldFact, newFact, contextStr)
 
-	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
+	response, err := s.Prompter.AskSync(s.SessionID, prompt, nil)
 	if err != nil {
-		if utils.IsQuotaError(err) {
-			if s.rotateAndRetry() {
-				res, err = s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", []*genai.Content{{Parts: []*genai.Part{{Text: prompt}}}}, nil)
-			}
-		}
-		if err != nil {
-			return "CONFLICT", err
-		}
+		return "CONFLICT", err
 	}
 
-	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
-		decision := strings.TrimSpace(fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0]))
-		if strings.Contains(decision, "UPDATE") {
-			return "UPDATE", nil
-		}
+	if strings.Contains(strings.ToUpper(response), "UPDATE") {
+		return "UPDATE", nil
 	}
 	return "CONFLICT", nil
 }
 
-// ProcessMedia extrai conhecimento de arquivos visuais ou documentos (Imagens/PDFs).
-// Retorna (descrição, triplas, erro)
+// ProcessMedia extrai conhecimento de arquivos visuais via Agente ACP.
 func (s *OntologyService) ProcessMedia(ctx context.Context, data []byte, mimeType string) (string, []Triple, error) {
-	prompt := `Você é um especialista em visão computacional e extração de conhecimento.
-Analise este arquivo. Forneça uma descrição detalhada e extraia triplas semânticas (Person, Project, Task, Concept, Technology).
-
+	prompt := `Analise este arquivo. Forneça uma descrição detalhada e extraia triplas semânticas (Sujeito, Predicado, Objeto).
+	
 Formato:
 ---DESCRICAO---
 [Texto]
 ---TRIPLAS---
 [JSON]`
 
-	contents := []*genai.Content{
+	// Prepara a imagem para o ACP
+	images := []map[string]string{
 		{
-			Parts: []*genai.Part{
-				{InlineData: &genai.Blob{MIMEType: mimeType, Data: data}},
-				{Text: prompt},
-			},
+			"type": mimeType,
+			"data": utils.EncodeBase64(data),
 		},
 	}
 
-	res, err := s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", contents, nil)
+	response, err := s.Prompter.AskSync(s.SessionID, prompt, images)
 	if err != nil {
-		if utils.IsQuotaError(err) {
-			if s.rotateAndRetry() {
-				res, err = s.GenAI.Models.GenerateContent(ctx, "gemini-2.0-flash", contents, nil)
-			}
-		}
-		if err != nil {
-			return "", nil, fmt.Errorf("erro no processamento multimodal: %w", err)
-		}
+		return "", nil, fmt.Errorf("erro no processamento multimodal ACP: %w", err)
 	}
 
-	if len(res.Candidates) > 0 && len(res.Candidates[0].Content.Parts) > 0 {
-		fullText := fmt.Sprintf("%v", res.Candidates[0].Content.Parts[0])
-		parts := strings.Split(fullText, "---TRIPLAS---")
-		description := strings.TrimSpace(strings.TrimPrefix(parts[0], "---DESCRICAO---"))
-		
-		var triples []Triple
-		if len(parts) > 1 {
-			triples, _ = parseTriples(parts[1])
-		}
-		return description, triples, nil
+	parts := strings.Split(response, "---TRIPLAS---")
+	description := strings.TrimSpace(strings.TrimPrefix(parts[0], "---DESCRICAO---"))
+	
+	var triples []Triple
+	if len(parts) > 1 {
+		triples, _ = parseTriples(parts[1])
 	}
-	return "", nil, fmt.Errorf("nenhum conteúdo gerado")
+	return description, triples, nil
 }
 
 func parseTriples(rawJSON string) ([]Triple, error) {

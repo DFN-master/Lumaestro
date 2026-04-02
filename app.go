@@ -163,7 +163,8 @@ func (a *App) initServices() error {
 	}
 
 	a.embedder = emb
-	a.ontology = provider.NewOntologyService(a.ctx, a.embedder.Client)
+	// 🧠 Migração para Modo Híbrido: Ontologia via Agente ACP (Local), Embeddings via API (KeyPool)
+	a.ontology = provider.NewOntologyService(a.ctx, a.executor, "acp-session-gemini")
 
 	// Inicializa os órgãos de RAG e Aprendizado Neural
 	fmt.Println("[App] 🧠 Ativando Córtex Neural (Ranker & Decay)...")
@@ -360,6 +361,45 @@ func (a *App) FullSync() string {
 	return a.ScanVault()
 }
 
+// ResetQdrantDB apaga permanentemente o banco de dados remoto e limpa o cache local.
+func (a *App) ResetQdrantDB() string {
+	if a.qdrant == nil || a.ctx == nil {
+		return "⚠️ Erro: Cliente Qdrant não inicializado."
+	}
+
+	fmt.Println("[RESET] 🚨 Iniciando Reset do Banco de Dados Qdrant...")
+	
+	collections := []string{"obsidian_knowledge", "knowledge_graph"}
+	for _, name := range collections {
+		err := a.qdrant.DeleteCollection(name)
+		if err != nil {
+			fmt.Printf("[RESET] Erro ao excluir %s: %v\n", name, err)
+			continue
+		}
+		fmt.Printf("[RESET] ✅ Coleção %s excluída.\n", name)
+	}
+
+	// 2. Limpa Cache Local
+	if a.crawler != nil {
+		fmt.Println("[RESET] 🧹 Limpando cache do Crawler...")
+		a.crawler.PurgeCache()
+	}
+
+	// 3. Recria Infraestrutura do zero
+	fmt.Println("[RESET] 🏗️ Recriando infraestrutura (3072 dim)...")
+	if a.crawler != nil {
+		a.crawler.EnsureCollections(a.ctx)
+	}
+
+	// 4. Notifica o Frontend
+	runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		"source":  "SYSTEM",
+		"content": "☢️ RESET COMPLETO: Banco de dados Qdrant e cache local foram expurgados.",
+	})
+
+	return "✅ O banco de dados foi resetado com sucesso! Inicie um novo SCAN para repovoar."
+}
+
 // PurgeCache limpa todo o histórico de indexação local.
 func (a *App) PurgeCache() string {
 	if a.crawler == nil {
@@ -378,25 +418,38 @@ func (a *App) SyncAllNodes() {
 		return
 	}
 
-	fmt.Println("[Sync] Sincronizando todos os nós do Qdrant com o Frontend...")
-	// Busca um lote grande o suficiente para cobrir o vault do usuário (1000+)
+	fmt.Println("[Sync] Sincronizando todos os nós do Qdrant com o Frontend (BATCH)...")
+	// Busca um lote grande o suficiente para cobrir o vault do usuário (1500+)
 	points, err := a.qdrant.Search("obsidian_knowledge", nil, 1500)
 	if err != nil {
 		fmt.Printf("[Sync] Erro ao buscar nós para sincronização: %v\n", err)
 		return
 	}
 
+	var batch []map[string]interface{}
 	for _, p := range points {
 		name, _ := p["name"].(string)
-		if name == "" { continue }
+		if name == "" {
+			continue
+		}
 
-		runtime.EventsEmit(a.ctx, "graph:node", map[string]interface{}{
+		batch = append(batch, map[string]interface{}{
 			"id":            strings.ToLower(name),
 			"name":          name,
 			"document-type": "markdown",
 		})
 	}
-	fmt.Printf("[Sync] ✅ %d nós sincronizados visualmente.\n", len(points))
+
+	// Emite o pacote completo de uma só vez para evitar sobrecarga no motor gráfico
+	runtime.EventsEmit(a.ctx, "graph:nodes:batch", batch)
+	fmt.Printf("[Sync] ✅ %d nós sincronizados em lote.\n", len(batch))
+
+	// 🪐 Automação: Dispara saúde e tecelagem automaticamente após o Sync
+	go func() {
+		time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
+		stats, _ := a.AnalyzeGraphHealth()
+		runtime.EventsEmit(a.ctx, "graph:health:update", stats)
+	}()
 }
 
 // RunVectorDiagnostic executa um Stress Test pontual para validar Gemini + Qdrant Cloud.
@@ -766,7 +819,13 @@ func (a *App) GetNodeDetails(nodeID string) (map[string]interface{}, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("origem não encontrada para o nó: %s", nodeID)
+	// 3. Fallback: Se não existe no banco, é uma dedução/especulação da IA (Nó Virtual)
+	return map[string]interface{}{
+		"path":    "Conceito Neural",
+		"content": fmt.Sprintf("O nó '%s' é um conceito abstrato detectado pela IA durante a tecelagem do conhecimento. Ele ainda não possui uma nota física dedicada no seu Obsidian.", nodeID),
+		"type":    "virtual",
+		"source":  "Inteligência Artificial",
+	}, nil
 }
 
 // AnalyzeGraphHealth analisa a integridade semântica do grafo.

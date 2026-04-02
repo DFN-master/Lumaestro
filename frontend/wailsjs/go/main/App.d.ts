@@ -49,6 +49,8 @@ export function OpenFileInEditor(arg1:string):Promise<void>;
 
 export function PurgeCache():Promise<string>;
 
+export function ResetQdrantDB():Promise<string>;
+
 export function ResizeTerminal(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function ResolveConflict(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string,arg6:string):Promise<string>;

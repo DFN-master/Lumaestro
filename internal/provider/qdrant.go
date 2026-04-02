@@ -487,3 +487,34 @@ func (c *QdrantClient) CountPoints(collection string) (int, error) {
 
 	return result.Result.PointsCount, nil
 }
+
+// DeleteCollection exclui permanentemente uma coleção do Qdrant.
+func (c *QdrantClient) DeleteCollection(name string) error {
+	url := fmt.Sprintf("%s/collections/%s", c.BaseURL, name)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+	if c.APIKey != "" {
+		req.Header["api-key"] = []string{c.APIKey}
+		req.Header.Set("Api-Key", c.APIKey)
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("falha ao excluir coleção %s: status %d", name, resp.StatusCode)
+	}
+
+	return nil
+}

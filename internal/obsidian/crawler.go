@@ -296,14 +296,21 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 
 	// ══════════════════════════════════════════════════════════
 	// PASSO 2: PERSISTÊNCIA VETORIAL (Depende da API Gemini)
-	// Se a API falhar (429, erro de rede), o nó já está visível
-	// no grafo. O embedding será feito na próxima indexação.
 	// ══════════════════════════════════════════════════════════
-	vector, err := c.Embedder.GenerateEmbedding(ctx, textContent)
+	var vector []float32
+	if isImage || isPDF {
+		// 🌟 MULTIMODALIDADE NATIVA (Gemini Embedding 2)
+		// Transforma a mídia diretamente em um vetor sem precisar de descrição prévia.
+		mimeType := "image/png"
+		if isPDF { mimeType = "application/pdf" }
+		
+		vector, err = c.Embedder.GenerateMultimodalEmbedding(ctx, rawContent, mimeType)
+	} else {
+		vector, err = c.Embedder.GenerateEmbedding(ctx, textContent)
+	}
+
 	if err != nil {
-		fmt.Printf("[Crawler] ⚠️ Embedding falhou para %s (API indisponível): %s\n", nodeName, utils.FormatGenAIError(err))
-		// Mesmo sem embedding, atualizamos o cache para não re-processar
-		// links visuais. O próximo SCAN com API disponível fará o embedding.
+		fmt.Printf("[Crawler] ⚠️ Embedding falhou para %s: %s\n", nodeName, utils.FormatGenAIError(err))
 		return true, nil
 	}
 

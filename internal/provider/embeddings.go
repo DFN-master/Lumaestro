@@ -58,7 +58,6 @@ func (s *EmbeddingService) rotateAndRetry() bool {
 }
 
 // GenerateEmbedding transforma um texto em um vetor []float32.
-// Em caso de erro de quota, rotaciona automaticamente para a próxima chave do pool.
 func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) ([]float32, error) {
 	contents := []*genai.Content{
 		{
@@ -68,11 +67,35 @@ func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) (
 		},
 	}
 
-	res, err := s.Client.Models.EmbedContent(ctx, "gemini-embedding-2-preview", contents, nil)
+	return s.embedWithRetry(ctx, contents)
+}
+
+// GenerateMultimodalEmbedding transforma um binário (imagem, PDF, etc) em um vetor []float32.
+func (s *EmbeddingService) GenerateMultimodalEmbedding(ctx context.Context, data []byte, mimeType string) ([]float32, error) {
+	contents := []*genai.Content{
+		{
+			Parts: []*genai.Part{
+				{
+					InlineData: &genai.Blob{
+						Data:     data,
+						MIMEType: mimeType,
+					},
+				},
+			},
+		},
+	}
+
+	return s.embedWithRetry(ctx, contents)
+}
+
+// embedWithRetry é o motor central que realiza a chamada e gerencia a rotação de chaves.
+func (s *EmbeddingService) embedWithRetry(ctx context.Context, contents []*genai.Content) ([]float32, error) {
+	model := "gemini-embedding-2-preview"
+
+	res, err := s.Client.Models.EmbedContent(ctx, model, contents, nil)
 	if err != nil {
-		// Tenta rotacionar se for erro de quota
 		if utils.IsQuotaError(err) {
-			fmt.Printf("[KeyPool] ⚠️ Chave exausta (quota). Tentando próxima...\n")
+			fmt.Printf("[KeyPool] ⚠️ Chave exausta (quota) em Embeddings. Tentando próxima...\n")
 
 			cfg, _ := config.Load()
 			maxRetries := 0
@@ -84,12 +107,12 @@ func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) (
 				if !s.rotateAndRetry() {
 					break
 				}
-				res, err = s.Client.Models.EmbedContent(ctx, "gemini-embedding-2-preview", contents, nil)
+				res, err = s.Client.Models.EmbedContent(ctx, model, contents, nil)
 				if err == nil {
 					break
 				}
 				if !utils.IsQuotaError(err) {
-					return nil, fmt.Errorf("erro ao gerar embedding (pós-rotação): %w", err)
+					return nil, fmt.Errorf("erro fatal em embedding (pós-rotação): %w", err)
 				}
 				fmt.Printf("[KeyPool] ⚠️ Chave #%d também exausta: %s\n", i+2, utils.FormatGenAIError(err))
 			}
@@ -108,4 +131,3 @@ func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) (
 
 	return res.Embeddings[0].Values, nil
 }
-

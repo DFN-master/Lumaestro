@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { GetConfig, SaveConfig, GetToolsStatus, InstallTool, SetupTool, AddGeminiAccount, SwitchGeminiAccount, LoginGeminiAccount, AddMCPServer, ListMCPServers } from '../../wailsjs/go/main/App'
+import { GetConfig, SaveConfig, GetToolsStatus, InstallTool, SetupTool, AddGeminiAccount, SwitchGeminiAccount, LoginGeminiAccount, AddMCPServer, ListMCPServers, ResetQdrantDB } from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime'
 
 const config = ref({
@@ -229,6 +229,24 @@ const toggleExplorationMode = async () => {
   const res = await window.go.main.App.SetExplorationMode(isExplorationMode.value)
   console.log(res)
 }
+
+const showResetModal = ref(false)
+const isResetting = ref(false)
+
+const handleResetDB = async () => {
+  isResetting.value = true
+  try {
+    const res = await ResetQdrantDB()
+    alert(res)
+    showResetModal.value = false
+    // Força atualização do status se necessário
+    refreshStatus()
+  } catch (e) {
+    alert("Erro ao resetar banco: " + e)
+  } finally {
+    isResetting.value = false
+  }
+}
 </script>
 
 <template>
@@ -308,6 +326,12 @@ const toggleExplorationMode = async () => {
         </div>
 
         <button @click="save" class="btn-glow-blue">SALVAR ALTERAÇÕES GERAIS</button>
+
+        <div class="danger-zone-compact" style="margin-top: 4rem; padding: 2rem; border-top: 1px solid rgba(239, 68, 68, 0.1);">
+           <h3 style="color: #ef4444; font-size: 0.8rem; letter-spacing: 2px; margin-bottom: 1rem;">CUIDADO: ZONA DE PERIGO</h3>
+           <p style="color: var(--p-text-dim); font-size: 0.75rem; margin-bottom: 1.5rem;">Deseja apagar todos os vetores e memórias do banco de dados?</p>
+           <button @click="showResetModal = true" class="btn-reset-db">EXPURGAR BANCO VETORIAL (RESET)</button>
+        </div>
       </section>
 
       <!-- ABA CHAVES (INJEÇÃO DE CHAVES DIRETAS) -->
@@ -597,6 +621,24 @@ const toggleExplorationMode = async () => {
         <div v-if="installStatus" class="t-status">>> {{ installStatus }}</div>
       </div>
     </footer>
+
+    <!-- MODAL DE CONFIRMAÇÃO DE RESET -->
+    <div v-if="showResetModal" class="premium-modal-overlay">
+       <div class="premium-modal-content warning-modal">
+          <div class="modal-icon">☢️</div>
+          <h2 class="modal-title">Reset Atômico do Banco</h2>
+          <div class="modal-body">
+             <p>Você está prestes a excluir **todas as coleções do Qdrant** ({{ config.qdrant_url }}) e limpar o cache local.</p>
+             <p class="warning-text">Esta ação é irreversível. O Maestro esquecerá todas as conexões neurais feitas até agora.</p>
+          </div>
+          <div class="modal-actions">
+             <button @click="showResetModal = false" :disabled="isResetting" class="btn-cancel">ABORTAR</button>
+             <button @click="handleResetDB" :disabled="isResetting" class="btn-confirm-delete">
+                {{ isResetting ? 'LIMPANDO...' : 'SIM, APAGAR TUDO' }}
+             </button>
+          </div>
+       </div>
+    </div>
   </main>
 </template>
 
@@ -917,11 +959,88 @@ const toggleExplorationMode = async () => {
   box-shadow: 0 10px 30px rgba(239, 68, 68, 0.2);
 }
 
-.btn-glow-red:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 15px 50px rgba(239, 68, 68, 0.4);
-  filter: brightness(1.2);
+.btn-glow-red:hover { 
+  transform: translateY(-3px); 
+  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
 }
+
+/* Reset DB Styles */
+.btn-reset-db {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-reset-db:hover {
+  background: #ef4444;
+  color: white;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+.warning-modal {
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+.warning-text {
+  color: #fca5a5;
+  font-weight: bold;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+
+.btn-confirm-delete {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-cancel {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.premium-modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.premium-modal-content {
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3rem;
+  border-radius: 32px;
+  max-width: 500px;
+  width: 100%;
+  text-align: center;
+}
+
+.modal-icon { font-size: 3rem; margin-bottom: 1.5rem; }
+.modal-title { font-weight: 900; font-size: 1.5rem; margin-bottom: 1.5rem; }
+.modal-body { color: #94a3b8; font-size: 0.95rem; line-height: 1.6; margin-bottom: 2.5rem; }
+.modal-actions { display: flex; gap: 1rem; justify-content: center; }
+</style>
 
 /* --- ACCOUNTS & ENGINES HUB --- */
 .accounts-grid-premium, .engine-cards-stack { 

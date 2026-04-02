@@ -93,11 +93,15 @@ func (c *Config) GeminiKeyCount() int {
 }
 
 func getConfigPath() string {
-	// Se existir um config.json na raiz do projeto durante o Wails Dev, usar ele!
-	if _, err := os.Stat("../../config.json"); err == nil {
-		return "../../config.json"
+	// Se existir um arquivo na raiz do projeto durante o Wails Dev, usar ele!
+	if _, err := os.Stat("../../.lumaestro.json"); err == nil {
+		return "../../.lumaestro.json"
 	}
-	return "config.json"
+	// Migração automática de config.json legado
+	if _, err := os.Stat("config.json"); err == nil && !strings.Contains(os.Getenv("WAILS_WASM"), "true") {
+		_ = os.Rename("config.json", ".lumaestro.json")
+	}
+	return ".lumaestro.json"
 }
 
 // Save armazena as configurações em um arquivo JSON.

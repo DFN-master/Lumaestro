@@ -134,7 +134,15 @@ onMounted(async () => {
     }
   })
 
-  // Escuta os dados do Grafo (Nodes e Edges)
+  // Escuta os dados do Grafo (Nodes e Edges) em lote (Batch Sync)
+  EventsOn('graph:nodes:batch', (batchNodes) => {
+    batchNodes.forEach(node => {
+      if (!state.nodes.find(n => n.id === node.id)) {
+        state.nodes.push(node)
+      }
+    })
+  })
+
   EventsOn('graph:node', (node) => {
     if (!state.nodes.find(n => n.id === node.id)) {
       state.nodes.push(node)

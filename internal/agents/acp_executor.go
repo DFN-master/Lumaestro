@@ -46,6 +46,10 @@ type ACPExecutor struct {
 
 	// 📡 Agregador de logs de rede
 	NetLog *utils.NetworkLogger
+	
+	// Turnos Ativos para AskSync
+	turnChannels map[string]chan string
+	turnMu       sync.Mutex
 }
 
 // SessionInfo representa metadados de uma sessão ACP (Checkpoint)
@@ -95,6 +99,7 @@ func NewACPExecutor() *ACPExecutor {
 		pendingRequests: make(map[int]chan JSONRPCMessage),
 		execLock:        make(chan struct{}, 1), // Apenas 1 ferramenta por vez
 		NetLog:          utils.NewNetworkLogger(5 * time.Second),
+		turnChannels:    make(map[string]chan string),
 	}
 }
 
@@ -572,12 +577,32 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 				// Reset total ao fim do turno
 				h.Session.isLoggingThought = false
 				h.Session.isLoggingMessage = false
+
+				// Sinaliza para o AskSync informando que o texto acabou (EOF virtual)
+				h.Executor.turnMu.Lock()
+				if ch, ok := h.Executor.turnChannels[h.Session.ID]; ok {
+					close(ch)
+					delete(h.Executor.turnChannels, h.Session.ID)
+				}
+				h.Executor.turnMu.Unlock()
+
 			} else if update.SessionUpdate == "agent_message_error" || update.SessionUpdate == "error" {
 				// Relatar qualquer erro ou notificação inesperada
 				h.Executor.LogChan <- ExecutionLog{
 					Source:  "ERROR",
 					Content: "⚠️ Aviso do Gemini: O formato da sua mensagem (prompt) pode ter sido rejeitado internamente.",
 				}
+
+				h.Executor.turnMu.Unlock()
+			}
+
+			// Se houver um AskSync aguardando, envia o chunk para o canal correspondente (Dentro do escopo de p.Update)
+			if update.SessionUpdate == "agent_message_chunk" && update.Content.Text != "" {
+				h.Executor.turnMu.Lock()
+				if ch, ok := h.Executor.turnChannels[h.Session.ID]; ok {
+					ch <- update.Content.Text
+				}
+				h.Executor.turnMu.Unlock()
 			}
 		}
 	}
@@ -925,6 +950,46 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 		Method:  "session/prompt",
 		Params:  params,
 	})
+}
+
+// AskSync envia um prompt (com imagens opcionais) e aguarda a resposta completa da IA (Bloqueante).
+func (e *ACPExecutor) AskSync(sessionID string, prompt string, images []map[string]string) (string, error) {
+	e.Mu.Lock()
+	_, ok := e.ActiveSessions[sessionID]
+	e.Mu.Unlock()
+
+	if !ok {
+		return "", fmt.Errorf("sessão '%s' não encontrada para AskSync", sessionID)
+	}
+
+	// Prepara o canal para receber os chunks
+	ch := make(chan string, 512)
+	e.turnMu.Lock()
+	e.turnChannels[sessionID] = ch
+	e.turnMu.Unlock()
+
+	// Envia o prompt (suporta imagens)
+	err := e.SendInput(sessionID, prompt, images)
+	if err != nil {
+		return "", err
+	}
+
+	// Coleta os chunks até o canal ser fechado pelo HandleNotification
+	var fullResponse strings.Builder
+	timeout := time.After(60 * time.Second)
+
+	for {
+		select {
+		case chunk, ok := <-ch:
+			if !ok {
+				// Turno completo com sucesso
+				return fullResponse.String(), nil
+			}
+			fullResponse.WriteString(chunk)
+		case <-timeout:
+			return "", fmt.Errorf("timeout aguardando resposta completa do agente")
+		}
+	}
 }
 
 // StopSession encerra uma sessão ativa.

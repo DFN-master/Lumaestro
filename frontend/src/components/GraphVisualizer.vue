@@ -225,27 +225,19 @@ const initGraph = () => {
           nodeDetails.value = details
         } else {
           nodeDetails.value = {
-            path: "Origem Desconhecida",
-            content: "Não foi possível resgatar os metadados desta nota no banco de conhecimento.",
-            source: "Cache Offline"
+            path: "Conceito Neural",
+            content: `O nó '${node.id}' é uma ponte lógica criada pela IA para conectar suas ideias. Ele não possui um arquivo físico, mas serve como âncora semântica no seu grafo.`,
+            source: "Inteligência Artificial",
+            isVirtual: true
           }
         }
       } catch (e) {
         console.error("Erro ao buscar detalhes:", e)
-        const errorMsg = String(e).toLowerCase()
-        
-        if (errorMsg.includes("não encontrado") || errorMsg.includes("not found")) {
-          nodeDetails.value = {
-            path: "Sinapse Não Indexada",
-            content: "O Maestro visualiza este nó, mas o conteúdo ainda não chegou ao Coolify. Por favor, clique em SCAN (ou RESET se trocou a URL) para sincronizar o grafo.",
-            source: "Cache Offline"
-          }
-        } else {
-          nodeDetails.value = {
-            path: "Falha do Motor",
-            content: `O Maestro encontrou um problema técnico ao acessar o banco: ${e}. Verifique sua conexão ou tente um RESET.`,
-            source: "Erro Interno"
-          }
+        nodeDetails.value = {
+          path: "Conceito Neural",
+          content: `O nó '${node.id}' é uma ponte lógica criada pela IA para conectar suas ideias. Ele não possui um arquivo físico, mas serve como âncora semântica no seu grafo.`,
+          source: "Inteligência Artificial",
+          isVirtual: true
         }
       }
     })
@@ -400,26 +392,13 @@ onMounted(() => {
     console.warn("⚠️ CONFLITO DETECTADO:", conflict)
   })
 
-  // 🪐 Ouvinte de Novos Nós (Nós individuais/Isolados)
-  window.runtime.EventsOn("graph:node", (node) => {
-    if (!Graph || !node?.id) return
-    
-    const { nodes, links } = Graph.graphData()
-    
-    // Evita duplicatas (se o nó já existe, não precisamos fazer nada)
-    const exists = nodes.find(n => n.id === node.id)
-    if (exists) return
-
-    // Adiciona o novo nó ao motor físico
-    nodes.push({
-      id: node.id,
-      name: node.name || node.id,
-      "document-type": node["document-type"] || "chunk",
-      virtual: false // Nós vindos do backend como 'node' são reais
-    })
-
-    Graph.graphData({ nodes, links })
+  // 🪐 Sincronização de Saúde (Automática após Sync)
+  window.runtime.EventsOn("graph:health:update", (stats) => {
+    graphHealth.value = stats
   })
+
+  // 🪐 Sincronização: O componente agora confia inteiramente nas props reativas do Vue
+  // para grandes volumes de dados (Batch Sync), evitando sobrecarga de renderização.
 
   // 🕸️ Ouvinte de Arestas Dinâmicas (Streaming de Conexões)
   window.runtime.EventsOn("graph:edge", (edge) => {
@@ -645,10 +624,25 @@ onUnmounted(() => {
 
 // -- NOVA LÓGICA DE SINCRONIZAÇÃO TOTAL --
 const showConfirmModal = ref(false)
+const modalMode = ref('fast') // 'fast' ou 'full'
 
 const handleFullSync = () => {
-  if (scanning.value) return
+  modalMode.value = 'full'
   showConfirmModal.value = true
+}
+
+const handleFastSync = () => {
+  modalMode.value = 'fast'
+  showConfirmModal.value = true
+}
+
+const confirmSync = () => {
+  showConfirmModal.value = false
+  if (modalMode.value === 'full') {
+    executeFullSync()
+  } else {
+    triggerScan()
+  }
 }
 
 const executeFullSync = async () => {
@@ -681,15 +675,28 @@ const triggerScan = async () => {
 
 <template>
   <div class="graph-wrapper animate-fade-in">
-    <!-- MODAL DE CONFIRMAÇÃO PREMIUM -->
+    <!-- MODAL DE CONFIRMAÇÃO DINÂMICO -->
     <div v-if="showConfirmModal" class="premium-modal-overlay">
       <div class="premium-modal-content">
-        <div class="modal-icon">⚠️</div>
-        <h3 class="modal-title">Sincronização Atômica</h3>
-        <p class="modal-text">Deseja forçar uma sincronização total com o motor vetorial?<br/><strong>Isso expurgará o cache local.</strong></p>
+        <div class="modal-icon">{{ modalMode === 'full' ? '⚙️' : '🚀' }}</div>
+        <h3 class="modal-title">{{ modalMode === 'full' ? 'Reindexação Forçada' : 'Sincronização Inteligente' }}</h3>
+        
+        <div class="modal-body">
+          <p v-if="modalMode === 'full'" class="modal-text">
+            Deseja forçar uma varredura completa de todos os <strong>{{ stats.total_notes || nodes.length }} arquivos</strong>?<br/>
+            <span class="warning-sub">Isso reconstrói o cache de auditoria e garante 100% de integridade. Use apenas se notar dados faltando.</span>
+          </p>
+          <p v-else class="modal-text">
+            Deseja iniciar a sincronização incremental?<br/>
+            <span class="info-sub">O Maestro buscará apenas notas <strong>novas ou modificadas</strong>. É o método mais rápido e econômico.</span>
+          </p>
+        </div>
+
         <div class="modal-actions">
            <button @click="showConfirmModal = false" class="btn-cancel">CANCELAR</button>
-           <button @click="executeFullSync" class="btn-confirm">INICIAR VARREDURA</button>
+           <button @click="confirmSync" class="btn-confirm" :class="modalMode">
+             {{ modalMode === 'full' ? 'INICIAR FAXINA' : 'SINCRONIZAR AGORA' }}
+           </button>
         </div>
       </div>
     </div>
@@ -706,9 +713,14 @@ const triggerScan = async () => {
       </div>
       
       <div class="ui-actions">
-        <div style="display: flex; gap: 8px;">
-          <button @click="handleFullSync" class="action-btn" :class="{'scanning-btn': scanning}" title="Forçar Sincronização Total">🎯 <span>RESET</span></button>
-          <button @click="triggerScan" class="action-btn" :class="{'scanning-btn': scanning}" title="Sincronização Rápida"><span v-if="!scanning">🔄</span><span v-else class="spin">⏳</span><span>SCAN</span></button>
+        <div class="sync-controls">
+          <button @click="handleFastSync" class="action-btn main-sync" :class="{'scanning-btn': scanning}" title="Sincronização Rápida">
+            <span v-if="!scanning">🚀</span><span v-else class="spin">⏳</span>
+            <span>SINCRONIZAR</span>
+          </button>
+          <button @click="handleFullSync" class="action-btn icon-only-btn" :class="{'scanning-btn': scanning}" title="Sincronização Total">
+            <span>⚙️</span>
+          </button>
         </div>
         <div class="stat-item">
           <span class="val">{{ graphHealth.active_nodes || nodes.length }}</span>
@@ -781,19 +793,22 @@ const triggerScan = async () => {
 
           <!-- Estado: Sucesso ou Erro (com conteúdo) -->
           <div v-else class="details-content">
-            <div class="info-group">
-              <label>DOCUMENTO ORIGEM</label>
-              <p class="source-path">{{ nodeDetails.path || "Memória de Chat" }}</p>
-            </div>
-
-            <div class="info-group">
-              <label>TRECHO FUNDAMENTADO (CHUNK)</label>
-              <div class="content-preview">
-                {{ nodeDetails.content || "Fato atomizado sem conteúdo textual." }}
+            <div class="provenance-metadata">
+              <div class="meta-item">
+                <span class="lab">DOCUMENTO ORIGEM</span>
+                <div class="val-box">{{ nodeDetails?.path || 'Escaneando...' }}</div>
+              </div>
+              
+              <div class="meta-item">
+                <span class="lab">TRECHO FUNDAMENTADO (CHUNK)</span>
+                <div class="content-box glass">
+                   {{ nodeDetails?.content || 'Aguardando recuperação semântica...' }}
+                </div>
               </div>
             </div>
 
-            <button v-if="nodeDetails.path && !nodeDetails.path.includes('indexada')" @click="openSource" class="btn-open-source">
+            <button v-if="nodeDetails && nodeDetails.path && !nodeDetails.isVirtual && nodeDetails.path !== 'Conceito Neural'" 
+                    @click="openSource" class="open-btn premium-btn">
               ABRIR ARQUIVO FONTE ✨
             </button>
           </div>
@@ -998,19 +1013,55 @@ const triggerScan = async () => {
   top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.7);
   backdrop-filter: blur(8px);
-  z-index: 100;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 20px;
 }
 
 .conflict-modal {
+  background: rgba(15, 23, 42, 0.95);
   padding: 2rem;
   border-radius: 24px;
   border: 1px solid rgba(239, 68, 68, 0.3);
   max-width: 450px;
   width: 90%;
   text-align: center;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+}
+
+.modal-body {
+  text-align: center;
+  margin: 15px 0 25px;
+}
+
+.warning-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: #ff9800;
+  margin-top: 8px;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.info-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: #4facfe;
+  margin-top: 8px;
+  opacity: 0.8;
+  line-height: 1.4;
+}
+
+.btn-confirm.full {
+  background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%) !important;
+  color: white !important;
+}
+
+.btn-confirm.fast {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
+  color: #0d1117 !important;
 }
 
 .conflict-header {
@@ -1141,25 +1192,52 @@ const triggerScan = async () => {
   gap: 1.5rem;
 }
 
+.sync-controls {
+  display: flex;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.main-sync {
+  flex: 1;
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
+  color: #0d1117 !important;
+  font-weight: 800 !important;
+  padding: 8px 16px !important;
+  min-width: 140px;
+}
+
+.main-sync:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(79, 172, 254, 0.4);
+}
+
+.icon-only-btn {
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.icon-only-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #4facfe;
+}
+
 .action-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: white;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 0.6rem;
-  font-weight: 800;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
-  transition: all 0.3s;
-}
-
-.action-btn:hover {
-  background: var(--primary);
-  border-color: var(--primary);
-  transform: translateY(-2px);
+  gap: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
 }
 
 .stat-item {
@@ -1323,7 +1401,18 @@ const triggerScan = async () => {
   50% { opacity: 1; }
   100% { opacity: 0.6; }
 }
-
+.virtual-badge {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #4facfe;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 20px;
+}
 .val {
   font-size: 1.2rem;
   font-weight: 900;

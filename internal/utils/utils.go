@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"regexp"
@@ -221,4 +222,9 @@ func FormatGenAIError(err error) string {
 	// Limpeza de URLs e metadados brutos (Details: [map...])
 	// Focamos no que importa para o usuário
 	return fmt.Sprintf("[Gemini 429] Cota excedida para '%s'.%s", model, retry)
+}
+
+// EncodeBase64 converte bytes para string base64.
+func EncodeBase64(data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
 }

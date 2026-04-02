@@ -94,6 +94,10 @@ export function PurgeCache() {
   return window['go']['main']['App']['PurgeCache']();
 }
 
+export function ResetQdrantDB() {
+  return window['go']['main']['App']['ResetQdrantDB']();
+}
+
 export function ResizeTerminal(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeTerminal'](arg1, arg2, arg3);
 }
