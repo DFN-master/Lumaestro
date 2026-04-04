@@ -50,6 +50,11 @@ type App struct {
 	LReflector   *lightning.Reflector
 	LOptimizer   *lightning.Optimizer
 	LRouter      *lightning.LLMRouter
+
+	// 🧠 Cérebro Relacional (V20, V22, V23)
+	GEngine      *rag.GraphEngine
+	Validator    *rag.AgentValidator
+	Recon        *rag.AgentRecon
 }
 
 // NewApp creates a new App application struct
@@ -204,7 +209,30 @@ func (a *App) initServices() error {
 
 	fmt.Println("[App] 🕸️ Tecendo o Crawler do Obsidian...")
 	a.emitBoot("crawler", "🕸️", "Tecendo o Crawler do Obsidian...")
+	
+	// 🧠 Cérebro Relacional (V20) e Auditor Neural (V22)
+	a.GEngine = rag.NewGraphEngine()
+	// O LStore pode estar nulo se Lightning não ativado, então Validator/Recon precisam lidar com isso.
+	a.Validator = rag.NewAgentValidator(a.LStore, a.GEngine)
+	a.Recon = rag.NewAgentRecon(a.LStore, a.GEngine, a.qdrant)
+
+	// Injetar GEngine no Crawler (dependendo da assinatura, aqui injetamos globalmente para uso futuro)
 	a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
+
+	// Restaurar Sinapses do DuckDB para a RAM (se disponível)
+	if a.LStore != nil {
+		nodes, edges, err := a.LStore.GetFullGraph()
+		if err == nil {
+			for _, n := range nodes {
+				a.GEngine.AddNode(n["id"].(string), n["name"].(string), n["type"].(string))
+			}
+			for _, e := range edges {
+				a.GEngine.AddEdge(e["source"].(string), e["target"].(string), e["weight"].(float64), e["relation_type"].(string))
+			}
+			a.GEngine.ComputePageRank()
+			fmt.Printf("[App] 🧬 %d nós e %d arestas restaurados para o cérebro em RAM.\n", len(nodes), len(edges))
+		}
+	}
 
 	// 🔥 Injeção de Autonomia: Maestro agora pode comandar o Crawler
 	a.executor.Tools.Indexer = a.crawler
@@ -1728,15 +1756,34 @@ func (a *App) SendMessageToSwarm(agentName, message string) string {
 	return fmt.Sprintf("💎 [%s] Resposta do Enxame: %s", provider, response)
 }
 
-// SendMessageToSwarm permite ao Comandante intervir diretamente no enxame via Dashboard.
-func (a *App) SendMessageToSwarm(agentName, message string) string {
-	if a.LRouter == nil { return "🔴 Roteador offline." }
+// RunReconScan dispara a busca por conexões perdidas e informa o frontend das propostas.
+func (a *App) RunReconScan() string {
+	if a.Recon == nil { return "🔴 Agente Recon offline." }
 	
-	fmt.Printf("[🕹️ COMANDO] Enviando ordem para %s: %s\n", agentName, message)
+	proposals, err := a.Recon.ScanMissingLinks(a.ctx)
+	if err != nil { return "🔴 Erro no Scan: " + err.Error() }
 	
-	// Executa a ordem com resiliência total
-	response, provider, err := a.LRouter.ExecuteWithFallback(a.ctx, "Você é o Maestro do enxame Lumaestro. Responda à ordem do Comandante de forma executiva.", message)
-	if err != nil { return "🔴 Falha no comando: " + err.Error() }
+	count := 0
+	for _, p := range proposals {
+		if !p.Auto {
+			count++
+			runtime.EventsEmit(a.ctx, "agent:proposal", p)
+		}
+	}
 	
-	return fmt.Sprintf("💎 [%s] Resposta do Enxame: %s", provider, response)
+	return fmt.Sprintf("🕵️‍♂️ Recon Scan concluído! %d novas sinapses propostas para sua revisão.", count)
+}
+
+// PruneGraph executa a poda neural baseada em PageRank para limpar o Dashboard.
+func (a *App) PruneGraph(threshold float64) string {
+	if a.GEngine == nil { return "🔴 Motor de grafos offline." }
+	
+	removed := a.GEngine.Prune(threshold)
+	if len(removed) > 0 {
+		// Sincroniza visualmente (Reset de Grafo no Front)
+		a.SyncAllNodes()
+		return fmt.Sprintf("🧹 Poda Neural concluída: %d nós irrelevantes removidos.", len(removed))
+	}
+	
+	return "✅ O grafo já está otimizado (sem nós abaixo do threshold)."
 }

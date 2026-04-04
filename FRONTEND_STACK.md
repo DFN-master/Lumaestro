@@ -11,3 +11,12 @@ Isso permite a simula‡Æo f¡sica dos n¢s do **Obsidian** em tempo real.
 ## ??? Ferramentas e UI  
 O **Vite** ‚ o motor de build que garante o hot-reload veloz.  
 Utilizamos **Xterm.js** para a renderiza‡Æo do terminal dos agentes. 
+
+---
+
+##  Documentos Relacionados
+- [ Índice Geral](./DOCS_INDEX.md)  Hub central de documentação
+- [ NEURAL_BRAIN](./NEURAL_BRAIN.md)  Grafos, PageRank, Auditoria
+- [ DOCUMENTATION](./DOCUMENTATION.md)  Arquitetura geral
+- [ RAG_FLOW](./RAG_FLOW.md)  Pipeline de busca vetorial
+- [ LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md)  DuckDB e aprendizado

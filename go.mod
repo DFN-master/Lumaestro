@@ -12,6 +12,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13
 	github.com/mattn/go-isatty v0.0.20
 	github.com/wailsapp/wails/v2 v2.12.0
+	gonum.org/v1/gonum v0.15.1
 	google.golang.org/genai v1.52.0
 	gorm.io/gorm v1.31.1
 )

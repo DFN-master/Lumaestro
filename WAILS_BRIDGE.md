@@ -11,3 +11,12 @@ Isso permite orquestrar o **Gemini** e o **Claude** via JavaScript.
 ## ?? Sistema de Eventos  
 O **Runtime** do Wails ‚ usado para enviar **Logs** e **Dados do Grafo**.  
 Sem essa ponte, a interface nÆo teria o movimento e f¡sica em tempo real. 
+
+---
+
+##  Documentos Relacionados
+- [ Índice Geral](./DOCS_INDEX.md)  Hub central de documentação
+- [ NEURAL_BRAIN](./NEURAL_BRAIN.md)  Grafos, PageRank, Auditoria
+- [ DOCUMENTATION](./DOCUMENTATION.md)  Arquitetura geral
+- [ RAG_FLOW](./RAG_FLOW.md)  Pipeline de busca vetorial
+- [ LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md)  DuckDB e aprendizado

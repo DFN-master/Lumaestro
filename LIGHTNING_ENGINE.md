@@ -64,3 +64,12 @@ re.EmitReward(rolloutID, attemptID, 1.0, "manual_feedback", nil)
 > **Mente Colmeia:** O conhecimento aprendido é destilado pelo motor e pode ser sincronizado com o **Obsidian Vault** (RAG), garantindo que as lições de um agente sirvam para todo o enxame.
 
 **Lumaestro: Inteligência que aprende. Economia que escala. 🐹⚡🤖💰**
+
+---
+
+##  Documentos Relacionados
+- [ �ndice Geral](./DOCS_INDEX.md)  Hub central de documenta��o
+- [ NEURAL_BRAIN](./NEURAL_BRAIN.md)  Grafos, PageRank, Auditoria
+- [ DOCUMENTATION](./DOCUMENTATION.md)  Arquitetura geral
+- [ RAG_FLOW](./RAG_FLOW.md)  Pipeline de busca vetorial
+- [ LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md)  DuckDB e aprendizado
