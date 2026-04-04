@@ -12,9 +12,9 @@ func TestGraphEngine_PageRank(t *testing.T) {
 	ge.AddNode("B", "Nota B", "note")
 	ge.AddNode("C", "Nota C", "note")
 
-	ge.AddEdge("A", "B", 1.0)
-	ge.AddEdge("B", "C", 1.0)
-	ge.AddEdge("C", "A", 1.0)
+	ge.AddEdge("A", "B", 1.0, "test")
+	ge.AddEdge("B", "C", 1.0, "test")
+	ge.AddEdge("C", "A", 1.0, "test")
 
 	ge.ComputePageRank()
 
@@ -40,9 +40,9 @@ func TestGraphEngine_BFS(t *testing.T) {
 	ge.AddNode("C", "Nota C", "note")
 	ge.AddNode("D", "Nota D", "note")
 
-	ge.AddEdge("A", "B", 1.0)
-	ge.AddEdge("B", "C", 1.0)
-	ge.AddEdge("C", "D", 1.0)
+	ge.AddEdge("A", "B", 1.0, "test")
+	ge.AddEdge("B", "C", 1.0, "test")
+	ge.AddEdge("C", "D", 1.0, "test")
 
 	// BFS de A com profundidade 2 deve pegar A, B e C (mas não D)
 	res := ge.BFS("A", 2)

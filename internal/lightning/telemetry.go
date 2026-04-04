@@ -2,7 +2,6 @@ package lightning
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 )
 

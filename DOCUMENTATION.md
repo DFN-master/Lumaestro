@@ -73,3 +73,13 @@ Localizado em `frontend/src/`, utiliza uma interface moderna com efeito *Glassmo
 
 ---
 *Documentação gerada automaticamente para o projeto Lumaestro.*
+
+---
+
+## 📚 Documentos Relacionados
+- [📖 Índice Geral](./DOCS_INDEX.md) — Hub central de documentação
+- [🧠 NEURAL_BRAIN](./NEURAL_BRAIN.md) — Grafos, PageRank, Auditoria Lógica
+- [🔗 WAILS_BRIDGE](./WAILS_BRIDGE.md) — Ponte Go ↔ Vue.js
+- [🎨 FRONTEND_STACK](./FRONTEND_STACK.md) — Vue 3, D3.js, Xterm.js
+- [⚡ LIGHTNING_ENGINE](./LIGHTNING_ENGINE.md) — DuckDB e aprendizado
+- [🔄 RAG_FLOW](./RAG_FLOW.md) — Pipeline de busca vetorial

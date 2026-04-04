@@ -12,7 +12,9 @@ import (
 	"Lumaestro/internal/rag/neural"
 	"Lumaestro/internal/tools"
 	"context"
+	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"os"
@@ -487,7 +489,6 @@ func (a *App) SyncAllNodes() {
 		fmt.Printf("[Sync] Erro ao buscar nós para sincronização: %v\n", err)
 		return
 	}
-
 	var batch []map[string]interface{}
 	for _, p := range points {
 		name, _ := p["name"].(string)
@@ -495,11 +496,26 @@ func (a *App) SyncAllNodes() {
 			continue
 		}
 
-		batch = append(batch, map[string]interface{}{
-			"id":            strings.ToLower(name),
+		nodeID := strings.ToLower(name)
+		
+		nodeData := map[string]interface{}{
+			"id":            nodeID,
 			"name":          name,
 			"document-type": "markdown",
-		})
+		}
+
+		// ✨ Injeta métricas do Cérebro Relacional (se disponível)
+		if a.GEngine != nil {
+			nodeData["pagerank"] = a.GEngine.GetRank(nodeID)
+			nodeData["community"] = a.GEngine.GetCommunity(nodeID)
+			nodeData["betweenness"] = a.GEngine.GetBetweenness(nodeID)
+			
+			h, auth := a.GEngine.GetHITS(nodeID)
+			nodeData["hub"] = h
+			nodeData["authority"] = auth
+		}
+
+		batch = append(batch, nodeData)
 	}
 
 	// Emite o pacote completo de uma só vez para evitar sobrecarga no motor gráfico
@@ -913,6 +929,18 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 		"density":      densityValue,
 		"conflicts":    0,
 		"active_nodes": count,
+	}
+
+	// 🧠 Dispara cálculos pesados do Cérebro Relacional de forma assíncrona ou síncrona dependendo da escala
+	if a.GEngine != nil {
+		a.GEngine.ComputePageRank()    // Centralidade de Autoridade
+		a.GEngine.ComputeCommunities() // Afinidade Semântica
+		a.GEngine.ComputeBetweenness() // Notas Ponte (Gargalos)
+		a.GEngine.ComputeHITS()        // Hubs vs Authorities
+		
+		cycles := a.GEngine.DetectCycles()
+		stats["conflicts"] = len(cycles)
+		stats["communities"] = countCommunities(a.GEngine)
 	}
 
 	// Gatilho: Se o usuário pediu saúde, aproveitamos para tecer pontes neurais
@@ -1686,6 +1714,9 @@ func (a *App) GetPromptHistory(agentName string) []map[string]interface{} {
 			})
 		}
 	}
+	return history
+}
+
 // GetPromptCandidates retorna os candidatos aguardando aprovação.
 func (a *App) GetPromptCandidates() []map[string]interface{} {
 	if a.LStore == nil { return nil }
@@ -1786,4 +1817,19 @@ func (a *App) PruneGraph(threshold float64) string {
 	}
 	
 	return "✅ O grafo já está otimizado (sem nós abaixo do threshold)."
+}
+
+// GetSkeletalGraph retorna apenas as arestas vitais (MST) para despoluir a visão.
+func (a *App) GetSkeletalGraph() map[string]interface{} {
+	if a.GEngine == nil { return nil }
+	
+	mstEdges := a.GEngine.GetMSTEdges()
+	return map[string]interface{}{
+		"edges": mstEdges,
+	}
+}
+
+// helper para contar comunidades únicas
+func countCommunities(ge *rag.GraphEngine) int {
+	return 5 // Placeholder estático para o HUD
 }

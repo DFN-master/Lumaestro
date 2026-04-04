@@ -117,7 +117,6 @@ func NewACPExecutor() *ACPExecutor {
 		execLock:        make(chan struct{}, 1), // Apenas 1 ferramenta por vez
 		NetLog:          utils.NewNetworkLogger(5 * time.Second),
 		turnChannels:    make(map[string]chan string),
-		pendingRequests: make(map[int]chan JSONRPCMessage),
 	}
 }
 

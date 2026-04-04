@@ -23,7 +23,25 @@ let Graph = null
 let clickedNodeTimeout = null
 let moveInterval = null
 const keys = { w: false, a: false, s: false, d: false, q: false, e: false }
-const moveSpeed = 20 // Velocidade de voo aumentada em 5x para navegação rápida
+const moveSpeed = 20 
+
+// 🩻 X-RAY MODE & RECON STATE
+const xRayThreshold = ref(0)
+const scanLoading = ref(false)
+const pruneLoading = ref(false)
+const skeletalMode = ref(false)
+
+// Paleta de Cores Cibernéticas para Comunidades (Louvain)
+const communityPalette = [
+  '#ff00ff', // Magenta (Cyber)
+  '#00ff9f', // Verde Matrix
+  '#00b8ff', // Azul Elétrico
+  '#ff9500', // Laranja Nuclear
+  '#ff3b30', // Vermelho Pulsação
+  '#af52de', // Violeta Profundo
+  '#5856d6', // Índigo Indigo
+  '#ffcc00'  // Ouro Solar
+]
 
 const selectedNode = ref(null)
 const nodeDetails = ref(null)
@@ -49,25 +67,36 @@ const openSource = async () => {
   }
 }
 
-// Converte os dados para o formato do 3d-force-graph (incluindo nós virtuais)
+// Converte os dados para o formato do 3d-force-graph (incluindo nós virtuais e filtragem X-Ray)
 const getGraphData = () => {
   const nodesMap = new Map()
   
-  // 1. Adicionar nós reais
+  // 1. Adicionar nós reais (Filtrando por PageRank se X-Ray ativo)
   props.nodes.forEach(n => {
-    nodesMap.set(n.id, { ...n })
+    const pr = n.pagerank || 0
+    // O X-Ray só filtra se o threshold for > 0
+    if (xRayThreshold.value === 0 || pr >= xRayThreshold.value || n.type === 'source' || n.type === 'system') {
+      nodesMap.set(n.id, { ...n })
+    }
   })
 
   // 2. Adicionar nós virtuais a partir de conexões que não existem em 'nodes'
+  // (Somente se os destinos/origens passaram no filtro X-Ray)
   props.edges.forEach(e => {
     const s = e.source.id || e.source
     const t = e.target.id || e.target
     
-    if (!nodesMap.has(s)) nodesMap.set(s, { id: s, name: s, virtual: true })
-    if (!nodesMap.has(t)) nodesMap.set(t, { id: t, name: t, virtual: true })
+    if (nodesMap.has(s) || nodesMap.has(t)) {
+      if (!nodesMap.has(s)) nodesMap.set(s, { id: s, name: s, virtual: true })
+      if (!nodesMap.has(t)) nodesMap.set(t, { id: t, name: t, virtual: true })
+    }
   })
 
-  const links = props.edges.map(e => ({
+  const links = (skeletalMode.value ? props.edges.filter(e => e.label === 'mst' || e.is_mst) : props.edges).filter(e => {
+    const s = e.source.id || e.source
+    const t = e.target.id || e.target
+    return nodesMap.has(s) && nodesMap.has(t)
+  }).map(e => ({
     source: e.source.id || e.source,
     target: e.target.id || e.target,
     ...e
@@ -118,8 +147,8 @@ const initGraph = () => {
           color: color,
           transparent: true,
           opacity: 0.95,
-          emissive: color,
-          emissiveIntensity: 1.2, // Brilho de Sinapse Ativa
+          emissive: node.community !== undefined ? communityPalette[node.community % communityPalette.length] : color,
+          emissiveIntensity: 1.4, // Brilho de Sinapse Ativa
           roughness: 0,
           metalness: 1
         })
@@ -338,6 +367,41 @@ watch(() => props.activeNode, (newId) => {
     Graph.nodeThreeObject(Graph.nodeThreeObject()) 
   }
 })
+
+// 🩻 Watcher reativo para o Modo X-Ray
+watch(xRayThreshold, () => {
+  if (Graph) {
+    Graph.graphData(getGraphData())
+  }
+})
+
+// 🕵️‍♂️ Funções de Reconhecimento e Poda
+const runReconScan = async () => {
+  if (scanLoading.value) return
+  scanLoading.value = true
+  try {
+    const result = await window.go.main.App.RunReconScan()
+    console.log("[RECON] Scan concluído:", result)
+  } catch (e) {
+    console.error("Erro no Recon Scan:", e)
+  } finally {
+    scanLoading.value = false
+  }
+}
+
+const pruneNodes = async () => {
+  if (confirm(`Deseja remover permanentemente nós com PageRank abaixo de ${xRayThreshold.value}? (Notas de origem são protegidas)`)) {
+    pruneLoading.value = true
+    try {
+      const result = await window.go.main.App.PruneGraph(xRayThreshold.value)
+      console.log("[PODA] Resultado:", result)
+    } catch (e) {
+      console.error("Erro na poda:", e)
+    } finally {
+      pruneLoading.value = false
+    }
+  }
+}
 
 // Escutar Destaques de Trajetória (Context-Flow inspirado no TrustGraph)
 onMounted(() => {
@@ -671,6 +735,10 @@ const triggerScan = async () => {
     scanning.value = false
   }
 }
+
+watch(skeletalMode, () => {
+  if (Graph) Graph.graphData(getGraphData())
+})
 </script>
 
 <template>
@@ -725,6 +793,31 @@ const triggerScan = async () => {
         <div class="stat-item">
           <span class="val">{{ graphHealth.active_nodes || nodes.length }}</span>
           <span class="lab">NOTAS</span>
+        </div>
+      </div>
+
+      <!-- 🩻 CONTROLES X-RAY & RECON (FASE 23) -->
+      <div class="xray-panel glass">
+        <div class="xray-header">
+          <span class="xray-icon">🩻</span>
+          <span>MODO X-RAY</span>
+          <span class="xray-val">{{ (xRayThreshold * 100).toFixed(0) }}</span>
+        </div>
+        <input type="range" min="0" max="1" step="0.01" v-model.number="xRayThreshold" class="xray-slider" />
+        
+        <div class="recon-actions">
+           <button @click="runReconScan" class="recon-btn" :disabled="scanLoading" title="Scan Proativo">
+             <span v-if="!scanLoading">🕵️ RECON</span>
+             <span v-else class="spin">⏳</span>
+           </button>
+           <button @click="pruneNodes" class="prune-btn" :disabled="pruneLoading" title="Poda Neural">
+             <span v-if="!pruneLoading">🧹 PODA</span>
+             <span v-else class="spin">⏳</span>
+           </button>
+           <button @click="skeletalMode = !skeletalMode" :class="['recon-btn', { active: skeletalMode }]" title="Modo Esqueleto (MST)">
+             <span v-if="!skeletalMode">🩻 MST</span>
+             <span v-else>👁️ FULL</span>
+           </button>
         </div>
       </div>
 
@@ -1517,4 +1610,73 @@ const triggerScan = async () => {
   50% { transform: scale(1.5); opacity: 0.5; }
   100% { transform: scale(1); opacity: 1; }
 }
+/* 🩻 ESTILOS X-RAY & RECON */
+.xray-panel {
+  background: rgba(15, 23, 42, 0.4);
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.xray-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #94a3b8;
+}
+
+.xray-icon { filter: drop-shadow(0 0 5px #3b82f6); }
+
+.xray-val {
+  margin-left: auto;
+  color: #4facfe;
+  font-family: 'Fira Code', monospace;
+}
+
+.xray-slider {
+  width: 100%;
+  accent-color: #4facfe;
+  cursor: pointer;
+}
+
+.recon-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.recon-btn, .prune-btn {
+  flex: 1;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #fff;
+  padding: 6px;
+  border-radius: 8px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.recon-btn:hover { background: rgba(59, 130, 246, 0.2); border-color: #4facfe; }
+.prune-btn:hover { background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #ef4444; }
+
+.recon-btn.active {
+  background: rgba(59, 130, 246, 0.4);
+  border-color: #4facfe;
+  box-shadow: 0 0 10px rgba(79, 172, 254, 0.4);
+}
+
+.recon-btn:disabled, .prune-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.spin { display: inline-block; animation: spin 1s linear infinite; }
 </style>

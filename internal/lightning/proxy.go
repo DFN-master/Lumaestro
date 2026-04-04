@@ -1,6 +1,8 @@
 package lightning
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"

@@ -11,6 +11,11 @@ type Optimizer struct {
 	RewardEngine *RewardEngine
 }
 
+// NewOptimizer inicializa o motor de refinamento APO.
+func NewOptimizer(store *DuckDBStore, re *RewardEngine) *Optimizer {
+	return &Optimizer{Store: store, RewardEngine: re}
+}
+
 // PromptCandidate representa uma proposta de evolução do prompt.
 type PromptCandidate struct {
 	Name     string

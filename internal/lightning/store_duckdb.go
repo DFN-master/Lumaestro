@@ -95,6 +95,20 @@ func (s *DuckDBStore) InitSchema() error {
 			output VARCHAR,
 			created_at DOUBLE
 		)`,
+		`CREATE TABLE IF NOT EXISTS graph_nodes (
+			id VARCHAR PRIMARY KEY,
+			name VARCHAR,
+			type VARCHAR,
+			metadata JSON,
+			created_at DOUBLE
+		)`,
+		`CREATE TABLE IF NOT EXISTS graph_edges (
+			source_id VARCHAR,
+			target_id VARCHAR,
+			weight DOUBLE DEFAULT 1.0,
+			relation_type VARCHAR DEFAULT 'mentions',
+			created_at DOUBLE
+		)`,
 	}
 
 	for _, q := range queries {
@@ -250,4 +264,74 @@ func (s *DuckDBStore) GetGoldSamples(agentName string) ([]map[string]string, err
 // Close fecha a conexão com o DuckDB.
 func (s *DuckDBStore) Close() error {
 	return s.db.Close()
+}
+
+// --- Métodos do Cérebro Relacional (Grafo) ---
+
+// UpsertGraphNode insere ou atualiza um nó no grafo analítico.
+func (s *DuckDBStore) UpsertGraphNode(id, name, nodeType string, metadata map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	metaJSON, _ := json.Marshal(metadata)
+	query := `INSERT INTO graph_nodes (id, name, type, metadata, created_at)
+			  VALUES (?, ?, ?, ?, ?)
+			  ON CONFLICT (id) DO UPDATE SET 
+			  name = excluded.name, type = excluded.type, metadata = excluded.metadata`
+	
+	_, err := s.db.Exec(query, id, name, nodeType, string(metaJSON), time.Now().UnixNano())
+	return err
+}
+
+// InsertGraphEdge insere uma relação semântica entre dois nós.
+func (s *DuckDBStore) InsertGraphEdge(sourceID, targetID string, weight float64, relationType string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	query := `INSERT INTO graph_edges (source_id, target_id, weight, relation_type, created_at)
+			  VALUES (?, ?, ?, ?, ?)`
+	
+	_, err := s.db.Exec(query, sourceID, targetID, weight, relationType, time.Now().UnixNano())
+	return err
+}
+
+// GetFullGraph recupera todos os nós e arestas para carregar na RAM (Gonum).
+func (s *DuckDBStore) GetFullGraph() ([]map[string]interface{}, []map[string]interface{}, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 1. Recuperar Nós
+	rowsN, err := s.db.Query(`SELECT id, name, type FROM graph_nodes`)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rowsN.Close()
+
+	var nodes []map[string]interface{}
+	for rowsN.Next() {
+		var id, name, t string
+		if err := rowsN.Scan(&id, &name, &t); err == nil {
+			nodes = append(nodes, map[string]interface{}{"id": id, "name": name, "type": t})
+		}
+	}
+
+	// 2. Recuperar Arestas
+	rowsE, err := s.db.Query(`SELECT source_id, target_id, weight, relation_type FROM graph_edges`)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rowsE.Close()
+
+	var edges []map[string]interface{}
+	for rowsE.Next() {
+		var src, tgt, rel string
+		var w float64
+		if err := rowsE.Scan(&src, &tgt, &w, &rel); err == nil {
+			edges = append(edges, map[string]interface{}{
+				"source": src, "target": tgt, "weight": w, "relation_type": rel,
+			})
+		}
+	}
+
+	return nodes, edges, nil
 }

@@ -3,17 +3,16 @@ package rag
 import (
 	"Lumaestro/internal/lightning"
 	"fmt"
-	"strings"
 )
 
 // AgentValidator é o auditor lógico do enxame Lumaestro.
 type AgentValidator struct {
 	Store  *lightning.DuckDBStore
-	Graph  *rag.GraphEngine
+	Graph  *GraphEngine
 }
 
 // NewAgentValidator cria uma nova instância do juiz neural.
-func NewAgentValidator(store *lightning.DuckDBStore, graph *rag.GraphEngine) *AgentValidator {
+func NewAgentValidator(store *lightning.DuckDBStore, graph *GraphEngine) *AgentValidator {
 	return &AgentValidator{
 		Store: store,
 		Graph: graph,

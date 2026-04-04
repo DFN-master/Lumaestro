@@ -42,12 +42,20 @@ Telemetria completa com visualização de mídias. O "Fluxo de Consciência" do 
 
 ---
 
-## 📚 Portal de Documentação (Saga de 18k)
+## 📚 Portal de Documentação
 
-Acesse nosso [Knowledge Hub](./DOCS/INDEX.md) para documentação técnica aprofundada:
-*   [Arquitetura Lightning](./DOCS/architecture/LIGHTNING_CORE.md) (Em breve)
-*   [Manual de Operações Elite](./DOCS/guide/COMMANDER_MANUAL.md) (Em breve)
-*   [Guia de Fine-Tuning RLHF](./DOCS/guide/FINE_TUNING_RLHF.md) (Em breve)
+Acesse o **[Índice de Documentação](./DOCS_INDEX.md)** para navegar por todos os manuais do projeto:
+
+| Documento | Área |
+|---|---|
+| [DOCUMENTATION.md](./DOCUMENTATION.md) | Arquitetura geral e setup |
+| [NEURAL_BRAIN.md](./NEURAL_BRAIN.md) | Grafos, PageRank, X-Ray, Auditoria |
+| [LIGHTNING_ENGINE.md](./LIGHTNING_ENGINE.md) | DuckDB, APO, RLHF, Custos |
+| [RAG_FLOW.md](./RAG_FLOW.md) | Crawler → Embeddings → Qdrant |
+| [AGENTS_GUIDE.md](./AGENTS_GUIDE.md) | Protocolo ACP e agentes |
+| [WAILS_BRIDGE.md](./WAILS_BRIDGE.md) | Ponte Go ↔ Vue.js |
+| [FRONTEND_STACK.md](./FRONTEND_STACK.md) | Vue 3, D3.js, Xterm.js |
+| [SINFONIA.md](./SINFONIA.md) | Marcos evolutivos |
 
 ---
 **Lumaestro: Evoluindo a autonomia, um rastro de cada vez.** 🐹⚙️⚡🤖💰🏁👁️📂🧪

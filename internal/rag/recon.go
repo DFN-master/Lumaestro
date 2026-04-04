@@ -11,12 +11,12 @@ import (
 // AgentRecon é o sentinela pró-ativo que encontra conexões perdidas.
 type AgentRecon struct {
 	Store  *lightning.DuckDBStore
-	Graph  *rag.GraphEngine
+	Graph  *GraphEngine
 	Qdrant *provider.QdrantClient
 }
 
 // NewAgentRecon cria uma nova instância do sentinela.
-func NewAgentRecon(store *lightning.DuckDBStore, graph *rag.GraphEngine, qdrant *provider.QdrantClient) *AgentRecon {
+func NewAgentRecon(store *lightning.DuckDBStore, graph *GraphEngine, qdrant *provider.QdrantClient) *AgentRecon {
 	return &AgentRecon{
 		Store:  store,
 		Graph:  graph,
@@ -50,9 +50,10 @@ func (r *AgentRecon) ScanMissingLinks(ctx context.Context) ([]ReconProposal, err
 	for _, p := range points {
 		sourceID := strings.ToLower(p["name"].(string))
 		
-		// 2. Procurar vizinhos semânticos no Qdrant (K=3)
-		// Aqui usamos a própria "embedding" salva se disponível, ou buscamos por nome
-		neighbors, err := r.Qdrant.Search("obsidian_knowledge", p, 5)
+		// 2. Procurar vizinhos semânticos no Qdrant (K=5)
+		// NOTA: Passamos nil aqui para listar outros pontos relevantes da coleção enquanto
+		// a extração do vetor original de 'p' não é implementada.
+		neighbors, err := r.Qdrant.Search("obsidian_knowledge", nil, 5)
 		if err != nil { continue }
 
 		for _, n := range neighbors {
