@@ -60,11 +60,13 @@ Para gerar o executável final (`Lumaestro.exe`) com todas as DLLs empacotadas:
 
 ---
 
-## 📚 Arquitetura Detalhada
-Acesse nossa [Documentação Interna](./doc/DOCS_INDEX.md) para explorar as entranhas do motor:
-- [Ponte Wails & Estabilidade CGO](./doc/WAILS_BRIDGE.md)
-- [Fluxo RAG e Vetores Qdrant](./doc/RAG_FLOW.md)
-- [Protocolos de Agentes ACP](./doc/AGENTS_GUIDE.md)
+## 📚 Documentação e Governança
+Acesse o nosso [Índice de Documentação](./docs/DOCS_INDEX.md) ou explore as seções críticas:
+- [Checklist de Tarefas (Lumaestro Sync)](./docs/tasks.md)
+- [Plano de Implementação](./docs/implementation.md)
+- [Guia de Uso (Manual)](./docs/walkthrough.md)
+- [Sinfonia e Agentes ACP](./docs/AGENTS_GUIDE.md)
+- [Arquitetura Neural](./docs/NEURAL_BRAIN.md)
 
 ---
 **Lumaestro: Evoluindo a autonomia, um rastro de cada vez.** 🐹⚙️⚡🤖🧬🏆🦾📂🧪

@@ -856,6 +856,9 @@ func (a *App) ResolveConflict(decision string, subject string, predicate string,
 }
 
 func (a *App) GetProjectDoc(name string) (string, error) {
+	if !strings.HasSuffix(name, ".md") {
+		name += ".md"
+	}
 	fmt.Printf("[App] Lendo documentação: %s\n", name)
 	path := filepath.Join(".", "docs", name)
 	content, err := os.ReadFile(path)
