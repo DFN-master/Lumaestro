@@ -3,6 +3,7 @@ package agents
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -47,8 +48,8 @@ func StartJSONRPCListener(r io.Reader, handler JSONRPCHandler) {
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		
-		// 🛠️ LOG DE DEPURAÇÃO (Igual ao script de teste)
-		// fmt.Printf("[STDOUT RAW] %s\n", string(line))
+		// 🛠️ LOG DE DEPURAÇÃO
+		fmt.Printf("[STDOUT RAW] %s\n", string(line))
 		
 		// Remove espaços em branco
 		if len(strings.TrimSpace(string(line))) == 0 {

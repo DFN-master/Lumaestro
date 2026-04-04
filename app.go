@@ -125,10 +125,11 @@ func (a *App) bootSequence() {
 			a.StartAgentSession(a.config.AutoStartAgents[0])
 		}
 
-		// 2. Indexação Silenciosa (RAG) - Agora com garantia de motor pronto!
+		// 2. Indexação Silenciosa (RAG) - Agora com a Garantia Múltipla de Motor Separado (Background)
 		if a.crawler != nil && a.config.ObsidianVaultPath != "" {
-			a.emitBoot("scan", "✈️", "Decolando Auto-Scan do Obsidian...")
-			fmt.Println("[BOOT] ✈️ Motores Prontos. Decolando Auto-Scan do Obsidian...")
+			a.emitBoot("scan", "✈️", "Decolando Auto-Scan do Obsidian (Engine em Background)...")
+			fmt.Println("[BOOT] ✈️ Motores Prontos. Iniciando Crawler em sub-sessão separada...")
+			go a.StartBackgroundAgentSession("gemini")
 			a.ScanVault()
 		}
 
@@ -193,7 +194,8 @@ func (a *App) initServices() error {
 
 	a.embedder = emb
 	// 🧠 Migração para Modo Híbrido: Ontologia via Agente ACP (Local), Embeddings via API (KeyPool)
-	a.ontology = provider.NewOntologyService(a.ctx, a.executor, "acp-session-gemini")
+	// A Ontologia usa a sessão de background para extrações não sujarem o chat
+	a.ontology = provider.NewOntologyService(a.ctx, a.executor, "acp-session-background-gemini")
 
 	// Inicializa os órgãos de RAG e Aprendizado Neural
 	fmt.Println("[App] 🧠 Ativando Córtex Neural (Ranker & Decay)...")
@@ -379,11 +381,14 @@ func (a *App) ScanVault() string {
 			return
 		}
 
-		// 2. Notificação Inicial (Agora segura pelo Nil Guard)
-		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-			"source":  "CRAWLER",
-			"content": "🚀 Iniciando Sincronização Semântica Completa em background...",
-		})
+		fmt.Println("[BACKEND] ⏳ Aguardando aquecimento do Motor ACP para Triplas (5s)...")
+		time.Sleep(5 * time.Second)
+
+		// 2. Mensagem silenciada no chat UI para respeitar o ambiente Black/Background
+		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		// 	"source":  "CRAWLER",
+		// 	"content": "🚀 Iniciando Sincronização Semântica Completa em background...",
+		// })
 
 		err := a.crawler.IndexVault(a.ctx)
 		if err != nil {
@@ -403,10 +408,11 @@ func (a *App) ScanVault() string {
 			fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
 		}
 
-		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
-			"source":  "CRAWLER",
-			"content": "🏛️ Sincronização semântica completa concluída com sucesso!",
-		})
+		// Silenciado para não sujar o Chat interativo
+		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		// 	"source":  "CRAWLER",
+		// 	"content": "🏛️ Sincronização semântica completa concluída com sucesso!",
+		// })
 
 		// 3. Força a atualização visual de todos os nós (isolados e conectados)
 		a.SyncAllNodes()
@@ -711,6 +717,24 @@ func (a *App) StartAgentSession(agent string) error {
 	fmt.Printf("[App] Iniciando agente: %s\n", agent)
 	// No primeiro boot ou reinício, passamos loadSessionID como "LATEST" para carregar a última Sinfonia.
 	return a.executor.StartSession(a.ctx, agent, sessionID, "LATEST", uuid.Nil, nil)
+}
+
+// StartBackgroundAgentSession cria uma instância paralela silenciosa exclusiva para o processamento de RAG
+func (a *App) StartBackgroundAgentSession(agent string) error {
+	sessionID := "acp-session-background-" + agent
+
+	a.executor.Mu.Lock()
+	_, exists := a.executor.ActiveSessions[sessionID]
+	a.executor.Mu.Unlock()
+
+	if exists {
+		fmt.Printf("[App] Agente de Background (%s) já está online.\n", agent)
+		return nil
+	}
+
+	fmt.Printf("[App] Iniciando Agente de BACKGROUND (Black): %s\n", agent)
+	// Background NUNCA deve carregar histórico (LATEST) para não misturar os contextos. Inicia sempre limpo.
+	return a.executor.StartSession(a.ctx, agent, sessionID, "", uuid.Nil, nil)
 }
 
 // ListAgentSessions retorna a lista de conversas salvas para o agente

@@ -55,7 +55,7 @@ func (c *QdrantClient) SetPayload(collection string, id uint64, payload map[stri
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
-		fmt.Printf("[DEBUG-QDRANT] 🏹 Enviando Request: %s | Triple-Auth Ativo | KeyPrefix: %s...\n", url, c.APIKey[:4])
+		// fmt.Printf("[DEBUG-QDRANT] 🏹 Enviando Request: %s | Triple-Auth Ativo | KeyPrefix: %s...\n", url, c.APIKey[:4])
 		// Redundância Tripla: Alguns proxies exigem minúsculo, outros capitalizado, outros Bearer.
 		req.Header["api-key"] = []string{c.APIKey}
 		req.Header.Set("Api-Key", c.APIKey)
@@ -151,7 +151,7 @@ func (c *QdrantClient) Search(collection string, vector []float32, limit int) ([
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
-		fmt.Printf("[DEBUG-QDRANT] 🏹 Enviando Request (%s): %s | Triple-Auth Ativo\n", collection, url)
+		// fmt.Printf("[DEBUG-QDRANT] 🏹 Enviando Request (%s): %s | Triple-Auth Ativo\n", collection, url)
 		req.Header["api-key"] = []string{c.APIKey}
 		req.Header.Set("Api-Key", c.APIKey)
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
@@ -229,7 +229,7 @@ func (c *QdrantClient) SearchByField(collection string, key string, value string
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
-		fmt.Printf("[DEBUG-QDRANT] 🏹 Enviando Scroll: %s | Triple-Auth Ativo\n", url)
+		// fmt.Printf("[DEBUG-QDRANT] 🏹 Enviando Scroll: %s | Triple-Auth Ativo\n", url)
 		req.Header["api-key"] = []string{c.APIKey}
 		req.Header.Set("Api-Key", c.APIKey)
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
@@ -286,7 +286,7 @@ func (c *QdrantClient) SearchWithScores(collection string, vector []float32, lim
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
-		fmt.Printf("[DEBUG-QDRANT] 🏹 Buscando com Scores: %s | Triple-Auth Ativo\n", url)
+		// fmt.Printf("[DEBUG-QDRANT] 🏹 Buscando com Scores: %s | Triple-Auth Ativo\n", url)
 		req.Header["api-key"] = []string{c.APIKey}
 		req.Header.Set("Api-Key", c.APIKey)
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
@@ -332,7 +332,7 @@ func (c *QdrantClient) CheckCollectionExists(name string) (bool, error) {
 		return false, err
 	}
 	if c.APIKey != "" {
-		fmt.Printf("[DEBUG-QDRANT] 🏹 Verificando Coleção: %s | Triple-Auth Ativo\n", url)
+		// fmt.Printf("[DEBUG-QDRANT] 🏹 Verificando Coleção: %s | Triple-Auth Ativo\n", url)
 		req.Header["api-key"] = []string{c.APIKey}
 		req.Header.Set("Api-Key", c.APIKey)
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
@@ -371,7 +371,7 @@ func (c *QdrantClient) CreateCollection(name string, dimension int) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
-		fmt.Printf("[DEBUG-QDRANT] 🏹 Criando Coleção: %s | Triple-Auth Ativo\n", url)
+		// fmt.Printf("[DEBUG-QDRANT] 🏹 Criando Coleção: %s | Triple-Auth Ativo\n", url)
 		req.Header["api-key"] = []string{c.APIKey}
 		req.Header.Set("Api-Key", c.APIKey)
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
@@ -411,7 +411,7 @@ func (c *QdrantClient) GetPoints(collection string, ids []uint64) ([]map[string]
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.APIKey != "" {
-		fmt.Printf("[DEBUG-QDRANT] 🏹 Buscando Pontos: %s | Triple-Auth Ativo\n", url)
+		// fmt.Printf("[DEBUG-QDRANT] 🏹 Buscando Pontos: %s | Triple-Auth Ativo\n", url)
 		req.Header["api-key"] = []string{c.APIKey}
 		req.Header.Set("Api-Key", c.APIKey)
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)

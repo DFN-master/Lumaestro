@@ -127,6 +127,8 @@ export function SetupTool(arg1:string):Promise<string>;
 
 export function StartAgentSession(arg1:string):Promise<void>;
 
+export function StartBackgroundAgentSession(arg1:string):Promise<void>;
+
 export function StartLoginSession(arg1:string):Promise<string>;
 
 export function StopAgentSession(arg1:string):Promise<void>;

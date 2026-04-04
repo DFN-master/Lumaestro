@@ -246,6 +246,10 @@ export function StartAgentSession(arg1) {
   return window['go']['main']['App']['StartAgentSession'](arg1);
 }
 
+export function StartBackgroundAgentSession(arg1) {
+  return window['go']['main']['App']['StartBackgroundAgentSession'](arg1);
+}
+
 export function StartLoginSession(arg1) {
   return window['go']['main']['App']['StartLoginSession'](arg1);
 }

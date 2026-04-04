@@ -227,27 +227,39 @@ func (e *ACPExecutor) StartSession(ctx context.Context, agent string, sessionID 
 	} else {
 		// 2. Fallback para node_modules local (estilo dev)
 		cwd, _ := os.Getwd()
-		localBin := filepath.Join(cwd, "node_modules", ".bin", binaryPath+".cmd")
+		binaryPath = filepath.Join(cwd, "node_modules", ".bin", binaryPath+".cmd")
+	}
 
-		// [TRUQUE DE SINFONIA] Se estivermos no Windows e for o Gemini, o .cmd é instável com espaços.
-		// Tentamos o Bypass: rodar o script JS diretamente via 'node'.
-		if agent == "gemini" {
-			jsPath := filepath.Join(cwd, "node_modules", "@google", "gemini-cli", "dist", "index.js")
-			if _, err := os.Stat(jsPath); err == nil {
-				binaryPath = "node"
-				args = []string{"--no-warnings=DEP0040", jsPath, "--acp", "--approval-mode=yolo"}
-				fmt.Printf("[ACP] Bypass CMD ativado: Rodando via Node.js diretamento no script JS.\n")
-			} else {
-				binaryPath = localBin
-			}
-		} else {
-			binaryPath = localBin
+	// [TRUQUE DE SINFONIA] Se estivermos no Windows e for o Gemini, o .cmd (tanto local quanto global)
+	// costuma engolir o Stdin em Pipes IPC, quebrando o JSON-RPC. Precisamos bypassar rodando via 'node'.
+	if agent == "gemini" && strings.HasSuffix(binaryPath, ".cmd") {
+		// A pasta .cmd do NPM fica em {NPM_ROOT}/gemini.cmd
+		// E o JS real fica em {NPM_ROOT}/node_modules/@google/gemini-cli/dist/index.js
+		baseDir := filepath.Dir(binaryPath)
+
+		// Verifica se é local (../node_modules) ou global (node_modules direto)
+		// Em local, baseDir = "cwd/node_modules/.bin". Logo o pacote está em "../@google/..."
+		// Em global, baseDir = "AppData/.../npm". Logo pacote está em "node_modules/@google/..."
+		jsPathGlobal := filepath.Join(baseDir, "node_modules", "@google", "gemini-cli", "bundle", "gemini.js")
+		jsPathLocal := filepath.Join(baseDir, "..", "@google", "gemini-cli", "bundle", "gemini.js")
+
+		jsTarget := ""
+		if _, err := os.Stat(jsPathGlobal); err == nil {
+			jsTarget = jsPathGlobal
+		} else if _, err := os.Stat(jsPathLocal); err == nil {
+			jsTarget = jsPathLocal
 		}
 
-		// Se o arquivo local existe, pegamos o caminho absoluto (crucial para Windows com espaços)
-		if absPath, errAbs := filepath.Abs(binaryPath); errAbs == nil && binaryPath != "node" {
-			binaryPath = absPath
+		if jsTarget != "" {
+			binaryPath = "node"
+			args = []string{"--no-warnings=DEP0040", jsTarget, "--acp", "--approval-mode=yolo"}
+			fmt.Printf("[ACP] Bypass CMD ativado: Rodando diretamente Node em %s\n", jsTarget)
 		}
+	}
+
+	// Se o arquivo não passou pelo Bypass (não é 'node'), resolvemos caminho absoluto
+	if absPath, errAbs := filepath.Abs(binaryPath); errAbs == nil && binaryPath != "node" {
+		binaryPath = absPath
 	}
 
 	fmt.Printf("[ACP] Executando: %s %v\n", binaryPath, args)
@@ -565,9 +577,11 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 			Message string `json:"message"`
 		}
 		if json.Unmarshal(params, &p) == nil {
-			h.Executor.LogChan <- ExecutionLog{
-				Source:  h.Session.AgentName,
-				Content: fmt.Sprintf("⏳ %s...", p.Message),
+			if !strings.Contains(h.Session.ID, "-background-") {
+				h.Executor.LogChan <- ExecutionLog{
+					Source:  h.Session.AgentName,
+					Content: fmt.Sprintf("⏳ %s...", p.Message),
+				}
 			}
 		}
 	}
@@ -587,9 +601,11 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 		}
 		if json.Unmarshal(params, &p) == nil {
 			update := p.Update
+			isBg := strings.Contains(h.Session.ID, "-background-")
+			
 			// Captura blocos de mensagem ou pensamentos
 			if update.SessionUpdate == "agent_thought_chunk" {
-				if update.Content.Text != "" {
+				if update.Content.Text != "" && !isBg {
 					if !h.Session.isLoggingThought {
 						utils.LogInfo(fmt.Sprintf("Processando raciocínio: %s...", strings.ToUpper(h.Session.AgentName)), "🧠")
 						h.Session.isLoggingThought = true
@@ -603,7 +619,7 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 					}
 				}
 			} else if update.SessionUpdate == "agent_message_chunk" {
-				if update.Content.Text != "" {
+				if update.Content.Text != "" && !isBg {
 					if !h.Session.isLoggingMessage {
 						utils.LogInfo("A IA está gerando a orquestração final...", "💬")
 						h.Session.isLoggingMessage = true
@@ -638,9 +654,11 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 
 			} else if update.SessionUpdate == "agent_message_error" || update.SessionUpdate == "error" {
 				// Relatar qualquer erro ou notificação inesperada
-				h.Executor.LogChan <- ExecutionLog{
-					Source:  "ERROR",
-					Content: "⚠️ Aviso do Gemini: O formato da sua mensagem (prompt) pode ter sido rejeitado internamente.",
+				if !strings.Contains(h.Session.ID, "-background-") {
+					h.Executor.LogChan <- ExecutionLog{
+						Source:  "ERROR",
+						Content: "⚠️ Aviso do Gemini: O formato da sua mensagem (prompt) pode ter sido rejeitado internamente.",
+					}
 				}
 
 				h.Executor.turnMu.Unlock()
@@ -952,7 +970,9 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 	}
 
 	// Se for uma resposta a um prompt (ferramenta), avisamos o frontend para atualizar o histórico
-	runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+	if !strings.Contains(h.Session.ID, "-background-") {
+		runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+	}
 }
 
 // Helper para encapsular resultados no formato que o Unmarshal aceita
@@ -1023,7 +1043,9 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 		default:
 		}
 		// Sincroniza lista após carregar uma sessão ou finalizar um turno
-		runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+		if !strings.Contains(h.Session.ID, "-background-") {
+			runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
+		}
 	}
 }
 
@@ -1038,7 +1060,17 @@ func (e *ACPExecutor) SendInput(sessionID string, input string, images []map[str
 	}
 
 	if session.ACPSessID == "" {
-		return fmt.Errorf("sessão não initializada completamente (sem ACP sessionId)")
+		// 🕊️ Mecanismo de Tolerância/Paciência: Espera até 10s se o humano enviar mensagem rápido demais
+		for i := 0; i < 10; i++ {
+			time.Sleep(1 * time.Second)
+			if session.ACPSessID != "" {
+				break
+			}
+		}
+		// Se ainda assim continuar vazio, então desistimos.
+		if session.ACPSessID == "" {
+			return fmt.Errorf("sessão não initializada completamente (sem ACP sessionId)")
+		}
 	}
 
 	// 🧠 Construção do Prompt Multimodal (Texto + Imagens)

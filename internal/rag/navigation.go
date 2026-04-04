@@ -67,85 +67,73 @@ func (n *GraphNavigator) ExpandContext(ctx context.Context, initialNotes []map[s
 		}
 	}
 
-	// 🚀 FASE 2: Expansão de Vizinhança (N-Hop) com Batch Fetch
+	// 🚀 FASE 2: Expansão de Vizinhança (N-Hop) guiada pelo Grafo Visual
 	if depthLimit > 0 {
-		var neighborsToFetch []uint64
+		type TrailHop struct {
+			From   string  `json:"from"`
+			To     string  `json:"to"`
+			Weight float32 `json:"weight"` // Peso aprendido para visualização visual
+		}
+		var trail []TrailHop
 		
 		for _, note := range initialNotes {
+			parentName, _ := note["name"].(string)
+			
 			if links, ok := note["links"].([]interface{}); ok {
-				for _, link := range links {
-					if len(neighborsToFetch) >= neighborLimit {
+				for _, linkIntf := range links {
+					if len(trail) >= neighborLimit {
 						break
 					}
-					id := uint64(link.(float64))
-					if !visitedIds[id] {
-						neighborsToFetch = append(neighborsToFetch, id)
-						visitedIds[id] = true
+					
+					// 🛡️ Prevenção de Panic: Os links são indexados como Nomes (String), não Qdrant IDs!
+					linkName, ok := linkIntf.(string)
+					if !ok {
+						continue // Pula chaves antigas que fossem IDs numéricos caso base v1
+					}
+
+					if visited[linkName] {
+						continue
+					}
+					visited[linkName] = true
+
+					// 🔍 Busca no motor Relacional por nome
+					nb, err := n.Qdrant.SearchByField("obsidian_knowledge", "name", linkName)
+					if err == nil && nb != nil {
+						name, _ := nb["name"].(string)
+						content, _ := nb["content"].(string)
+
+						if totalChars+len(content) > contextLimit {
+							continue
+						}
+
+						fullContext = append(fullContext, fmt.Sprintf("=== [CONTEXTO_RELACIONADO]: %s ===\n%s", name, content))
+						totalChars += len(content)
+
+						// ✨ VISUAL: destaca link individual E coleta trilha com peso neural
+						neuralWeight := n.Ranker.GetWeight(name)
+
+						runtime.EventsEmit(n.ctx, "graph:highlight", map[string]interface{}{
+							"source": parentName,
+							"target": name,
+							"weight": neuralWeight,
+						})
+						
+						trail = append(trail, TrailHop{
+							From:   parentName, 
+							To:     name, 
+							Weight: neuralWeight,
+						})
 					}
 				}
-			}
-			if len(neighborsToFetch) >= neighborLimit {
-				break
 			}
 		}
 
-		if len(neighborsToFetch) > 0 {
-			// Busca em lote inspirada na TrustGraph
-			neighbors, err := n.Qdrant.GetPoints("obsidian_knowledge", neighborsToFetch)
-			if err == nil {
-				// 🎬 Trilha cinematográfica: monta o percurso completo da IA
-				type TrailHop struct {
-					From   string  `json:"from"`
-					To     string  `json:"to"`
-					Weight float32 `json:"weight"` // Peso aprendido para visualização
-				}
-				var trail []TrailHop
-
-				for _, nb := range neighbors {
-					name, _ := nb["name"].(string)
-					content, _ := nb["content"].(string)
-
-					if totalChars+len(content) > contextLimit {
-						break
-					}
-
-					fullContext = append(fullContext, fmt.Sprintf("=== [CONTEXTO_RELACIONADO]: %s ===\n%s", name, content))
-					totalChars += len(content)
-
-					// ✨ VISUAL: destaca link individual E coleta trilha com peso neural
-					for _, note := range initialNotes {
-						parentName, _ := note["name"].(string)
-						if links, ok := note["links"].([]interface{}); ok {
-							for _, l := range links {
-								if uint64(l.(float64)) == uint64(nb["id"].(float64)) {
-									
-									// Captura o peso neural atual para o frontend
-									neuralWeight := n.Ranker.GetWeight(name)
-
-									runtime.EventsEmit(n.ctx, "graph:highlight", map[string]interface{}{
-										"source": parentName,
-										"target": name,
-										"weight": neuralWeight,
-									})
-									trail = append(trail, TrailHop{
-										From:   parentName, 
-										To:     name, 
-										Weight: neuralWeight,
-									})
-								}
-							}
-						}
-					}
-				}
-
-				// 🚀 Emite o percurso completo como uma única mensagem animável no frontend
-				if len(trail) > 0 {
-					runtime.EventsEmit(ctx, "graph:traverse", map[string]interface{}{
-						"hops":  trail,
-						"total": len(trail),
-					})
-				}
-			}
+		// 🚀 Emite o percurso completo como uma única mensagem animável no frontend
+		if len(trail) > 0 {
+			runtime.EventsEmit(ctx, "graph:traverse", map[string]interface{}{
+				"hops":  trail,
+				"total": len(trail),
+			})
 		}
 	}
 
