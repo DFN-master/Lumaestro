@@ -3,7 +3,7 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { EventsOn } from '../../wailsjs/runtime'
 import * as THREE from 'three'
 import ForceGraph3D from '3d-force-graph'
-import { ScanVault } from '../../wailsjs/go/main/App'
+import { ScanVault } from '../../wailsjs/go/core/App'
 import { useOrchestratorStore } from '../stores/orchestrator'
 
 const orchestrator = useOrchestratorStore()

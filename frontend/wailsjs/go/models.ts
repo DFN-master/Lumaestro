@@ -162,11 +162,23 @@ export namespace config {
 
 export namespace db {
 	
+	export class Timestamp {
+	
+	
+	    static createFrom(source: any = {}) {
+	        return new Timestamp(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	
+	    }
+	}
 	export class Agent {
 	    id: number[];
-	    // Go type: time
+	    // Go type: Timestamp
 	    created_at: any;
-	    // Go type: time
+	    // Go type: Timestamp
 	    updated_at: any;
 	    name: string;
 	    role: string;
@@ -175,7 +187,7 @@ export namespace db {
 	    capabilities: string;
 	    budget_monthly_cents: number;
 	    spent_monthly_cents: number;
-	    // Go type: time
+	    // Go type: Timestamp
 	    last_heartbeat_at: any;
 	
 	    static createFrom(source: any = {}) {
@@ -217,9 +229,9 @@ export namespace db {
 	}
 	export class AgentSecret {
 	    id: number[];
-	    // Go type: time
+	    // Go type: Timestamp
 	    created_at: any;
-	    // Go type: time
+	    // Go type: Timestamp
 	    updated_at: any;
 	    agent_id: number[];
 	    key: string;
@@ -259,16 +271,16 @@ export namespace db {
 	}
 	export class Approval {
 	    id: number[];
-	    // Go type: time
+	    // Go type: Timestamp
 	    created_at: any;
-	    // Go type: time
+	    // Go type: Timestamp
 	    updated_at: any;
 	    type: string;
 	    requested_by_agent_id?: number[];
 	    status: string;
 	    payload: string;
 	    decision_note: string;
-	    // Go type: time
+	    // Go type: Timestamp
 	    decided_at?: any;
 	
 	    static createFrom(source: any = {}) {
@@ -308,9 +320,9 @@ export namespace db {
 	}
 	export class Document {
 	    id: number[];
-	    // Go type: time
+	    // Go type: Timestamp
 	    created_at: any;
-	    // Go type: time
+	    // Go type: Timestamp
 	    updated_at: any;
 	    title: string;
 	    format: string;
@@ -356,9 +368,9 @@ export namespace db {
 	}
 	export class Goal {
 	    id: number[];
-	    // Go type: time
+	    // Go type: Timestamp
 	    created_at: any;
-	    // Go type: time
+	    // Go type: Timestamp
 	    updated_at: any;
 	    title: string;
 	    description: string;
@@ -404,9 +416,9 @@ export namespace db {
 	}
 	export class Issue {
 	    id: number[];
-	    // Go type: time
+	    // Go type: Timestamp
 	    created_at: any;
-	    // Go type: time
+	    // Go type: Timestamp
 	    updated_at: any;
 	    project_id?: number[];
 	    goal_id?: number[];
@@ -418,9 +430,9 @@ export namespace db {
 	    assignee_agent_id?: number[];
 	    assignee_agent?: Agent;
 	    created_by_agent_id?: number[];
-	    // Go type: time
+	    // Go type: Timestamp
 	    started_at?: any;
-	    // Go type: time
+	    // Go type: Timestamp
 	    completed_at?: any;
 	
 	    static createFrom(source: any = {}) {
@@ -466,9 +478,9 @@ export namespace db {
 	}
 	export class IssueComment {
 	    id: number[];
-	    // Go type: time
+	    // Go type: Timestamp
 	    created_at: any;
-	    // Go type: time
+	    // Go type: Timestamp
 	    updated_at: any;
 	    issue_id: number[];
 	    author_agent_id?: number[];
@@ -507,6 +519,23 @@ export namespace db {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace lightning {
+	
+	export class DuckDBStore {
+	
+	
+	    static createFrom(source: any = {}) {
+	        return new DuckDBStore(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	
+	    }
 	}
 
 }

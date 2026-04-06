@@ -86,6 +86,10 @@ export function GetAgents() {
   return window['go']['main']['App']['GetAgents']();
 }
 
+export function GetAutonomousMode() {
+  return window['go']['main']['App']['GetAutonomousMode']();
+}
+
 export function GetConfig() {
   return window['go']['main']['App']['GetConfig']();
 }
@@ -208,6 +212,10 @@ export function ResizeTerminal(arg1, arg2, arg3) {
 
 export function ResolveConflict(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['ResolveConflict'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function RunInTerminal(arg1) {
+  return window['go']['main']['App']['RunInTerminal'](arg1);
 }
 
 export function RunReconScan() {

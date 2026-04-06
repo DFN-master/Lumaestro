@@ -9,6 +9,7 @@ import (
 	
 	"Lumaestro/internal/db"
 	"Lumaestro/internal/lightning"
+	"Lumaestro/internal/core"
 )
 
 //go:embed all:frontend/dist
@@ -30,10 +31,8 @@ func main() {
 	}
 
 	// Create an instance of the app structure
-	app := NewApp()
-	app.LStore = lStore // Injeta o store analítico no App
-	app.executor.LStore = lStore // ⚡ Injeção no Executor
-	app.executor.RewardEngine = lightning.NewRewardEngine(lStore) // 🧬 Injeção de Recompensas
+	app := core.NewApp()
+	app.BindLightning(lStore) // Injeta de forma global no núcleo
 	
 	// Ativa o Proxy se habilitado nas configurações (Poderia ser condicional aqui)
 	lProxy := lightning.NewProxyServer(lStore, "8001")
@@ -49,7 +48,7 @@ func main() {
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
+		OnStartup:        app.Startup,
 		Bind: []interface{}{
 			app,
 		},

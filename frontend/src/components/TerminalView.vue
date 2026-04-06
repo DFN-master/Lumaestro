@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { SendTerminalData, ResizeTerminal } from '../../wailsjs/go/main/App'
+import { SendTerminalData, ResizeTerminal } from '../../wailsjs/go/core/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 
 const props = defineProps({

@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { CheckConnection } from '../wailsjs/go/main/App'
+import { CheckConnection } from '../wailsjs/go/core/App'
 import { EventsOn } from '../wailsjs/runtime'
 import ChatPanel from './components/ChatPanel.vue'
 import GraphVisualizer from './components/GraphVisualizer.vue'
@@ -9,7 +9,7 @@ import Settings from './components/Settings.vue'
 import DocViewer from './components/DocViewer.vue'
 import SwarmDashboard from './components/SwarmDashboard.vue'
 import { useOrchestratorStore } from './stores/orchestrator'
-import { GetProjectDoc } from '../wailsjs/go/main/App'
+import { GetProjectDoc } from '../wailsjs/go/core/App'
 
 const orchestrator = useOrchestratorStore()
 const currentView = ref('orchestrator') // views: orchestrator, settings, swarm

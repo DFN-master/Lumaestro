@@ -1,0 +1,334 @@
+package core
+
+import (
+	"Lumaestro/internal/config"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+// ScanVault percorre o Obsidian e indexa no Qdrant com Embeddings
+func (a *App) ScanVault() string {
+	fmt.Println("[BACKEND] ScanVault disparado assincronamente...")
+
+	// 🕵️⚡ RAG em Segundo Plano: Previne travamento total da UI e do Chat
+	go func() {
+		// 1. Verificação Crítica de Motor e Contexto
+		if a.crawler == nil || a.ctx == nil {
+			fmt.Println("[BACKEND] ⏳ Scan ADIADO: Aguardando prontidão dos motores...")
+			return
+		}
+
+		// 2. Mensagem silenciada no chat UI para respeitar o ambiente Black/Background
+		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		// 	"source":  "CRAWLER",
+		// 	"content": "🚀 Iniciando Sincronização Semântica Completa em background...",
+		// })
+
+		err := a.crawler.IndexVault(a.ctx)
+		if err != nil {
+			fmt.Printf("[BACKEND] Erro na Indexação do Vault: %v\n", err)
+			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+				"source":  "ERROR",
+				"content": "❌ Erro na Indexação do Obsidian: " + err.Error(),
+			})
+			return
+		}
+
+		// 2. Indexar a documentação do projeto (Lumaestro Core)
+		// Isso garante que o conhecimento 'RAG' do sistema também esteja disponível.
+		fmt.Println("[BACKEND] Indexando documentos internos do sistema...")
+		err = a.crawler.IndexSystemDocs(a.ctx, "./")
+		if err != nil {
+			fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
+		}
+
+		// 3. Indexar Repositórios Dinâmicos Importados e fazer Code Crawl
+		if len(a.config.ExternalProjects) > 0 {
+			fmt.Println("[BACKEND] Iniciando expansão radial (Projetos satélites)...")
+			err = a.crawler.IndexRepositories(a.ctx, a.config.ExternalProjects)
+			if err != nil {
+				fmt.Printf("[BACKEND] Erro ao sincronizar external projects: %v\n", err)
+			}
+		}
+
+		// Silenciado para não sujar o Chat interativo
+		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		// 	"source":  "CRAWLER",
+		// 	"content": "🏖️ Sincronização semântica completa concluída com sucesso!",
+		// })
+
+		// 3. Força a atualização visual de todos os nós (isolados e conectados)
+		os.Remove(".lumaestro_topology.json") // Invalida Topology Cache
+		a.SyncAllNodes()
+	}()
+
+	return "Indexação iniciada em segundo plano. O Maestro agora está integrando seu Obsidian e as memórias do sistema."
+}
+
+// FullSync limpa o cache e inicia uma indexação completa atômica.
+func (a *App) FullSync() string {
+	if a.crawler == nil {
+		return "⚠️ Motor de indexação indisponível."
+	}
+	fmt.Println("[BACKEND] 🔄 Solicitado FullSync Atômico. Limpando cache...")
+	a.crawler.PurgeCache()
+	return a.ScanVault()
+}
+
+// AddExternalProject vincula um repositório inteiro e o expande via Crawler Radial
+func (a *App) AddExternalProject(path string, coreNode string, includeCode bool) map[string]interface{} {
+	cfg, err := config.Load()
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": "Erro de config interno"}
+	}
+
+	for _, p := range cfg.ExternalProjects {
+		if p.Path == path {
+			return map[string]interface{}{"success": false, "error": "Repositório já mapeado!"}
+		}
+	}
+
+	cfg.ExternalProjects = append(cfg.ExternalProjects, config.ProjectScan{
+		Path:        path,
+		CoreNode:    coreNode,
+		IncludeCode: includeCode,
+	})
+
+	config.Save(*cfg)
+	a.config = cfg
+
+	// Dispara a sincronização imediatamente e de forma limpa (Sincronizando Nodes via EventsEmit com ScanVault)
+	_ = a.ScanVault()
+
+	return map[string]interface{}{"success": true, "message": "Projetos satélite vinculados e auto-scan de gravidade acionado."}
+}
+
+// GetExternalProjects retorna os repositórios em formato JSON para Renderização no frontend (Settings)
+func (a *App) GetExternalProjects() []config.ProjectScan {
+	if a.config != nil {
+		return a.config.ExternalProjects
+	}
+	return []config.ProjectScan{}
+}
+
+// SelectDirectory abre o explorador de arquivos nativo do S.O. para escolher uma pasta
+func (a *App) SelectDirectory() string {
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Selecione o Repositório do Projeto",
+	})
+	if err != nil {
+		return ""
+	}
+	return dir
+}
+
+// ResetQdrantDB apaga permanentemente o banco de dados remoto e limpa o cache local.
+func (a *App) ResetQdrantDB() string {
+	if a.qdrant == nil || a.ctx == nil {
+		return "⚠️ Erro: Cliente Qdrant não inicializado."
+	}
+
+	fmt.Println("[RESET] 🚨 Iniciando Reset do Banco de Dados Qdrant...")
+	
+	collections := []string{"obsidian_knowledge", "knowledge_graph"}
+	for _, name := range collections {
+		err := a.qdrant.DeleteCollection(name)
+		if err != nil {
+			fmt.Printf("[RESET] Erro ao excluir %s: %v\n", name, err)
+			continue
+		}
+		fmt.Printf("[RESET] ✅ Coleção %s excluída.\n", name)
+	}
+
+	// 2. Limpa Cache Local
+	if a.crawler != nil {
+		fmt.Println("[RESET] 🧹 Limpando cache do Crawler...")
+		a.crawler.PurgeCache()
+	}
+	os.Remove(".lumaestro_topology.json") // Expurga cache visual 3D
+
+	// 3. Recria Infraestrutura do zero
+	fmt.Println("[RESET] 🏗️ Recriando infraestrutura (3072 dim)...")
+	if a.crawler != nil {
+		a.crawler.EnsureCollections(a.ctx)
+	}
+
+	// 4. Notifica o Frontend
+	runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+		"source":  "SYSTEM",
+		"content": "☢️ RESET COMPLETO: Banco de dados Qdrant e cache local foram expurgados.",
+	})
+
+	return "✅ O banco de dados foi resetado com sucesso! Inicie um novo SCAN para repovoar."
+}
+
+// PurgeCache limpa todo o histórico de indexação local.
+func (a *App) PurgeCache() string {
+	os.Remove(".lumaestro_topology.json") // Invalida Topology Cache
+	if a.crawler == nil {
+		return "⚠️ Motor de indexação indisponível."
+	}
+	err := a.crawler.PurgeCache()
+	if err != nil {
+		return fmt.Sprintf("Erro ao limpar cache: %v", err)
+	}
+	return "Cache de indexação limpo com sucesso!"
+}
+
+// Sincronização e I/O Desacoplado do Motor Físico
+func (a *App) saveTopologyCache(batch []map[string]interface{}) {
+	data, err := json.Marshal(batch)
+	if err == nil {
+		os.WriteFile(".lumaestro_topology.json", data, 0644)
+	}
+}
+
+func (a *App) loadTopologyCache() []map[string]interface{} {
+	data, err := os.ReadFile(".lumaestro_topology.json")
+	if err != nil {
+		return nil
+	}
+	var batch []map[string]interface{}
+	json.Unmarshal(data, &batch)
+	return batch
+}
+
+// SyncAllNodes percorre o banco de dados e emite cada nota para o visualizador 3D.
+func (a *App) SyncAllNodes() {
+	if a.qdrant == nil || a.ctx == nil {
+		return
+	}
+
+	// 1. TENTA TOPOLOGY CACHE (IGNORA O QDRANT INSTANTANEAMENTE SE EXISTIR)
+	cachedBatch := a.loadTopologyCache()
+	if cachedBatch != nil && len(cachedBatch) > 0 {
+		fmt.Printf("[Sync] ⚡ Carregando %d nós instantaneamente via Fast Topology Cache (0 delay de infraestrutura)...\n", len(cachedBatch))
+		runtime.EventsEmit(a.ctx, "graph:nodes:batch", cachedBatch)
+		
+		go func() {
+			time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
+			stats, _ := a.AnalyzeGraphHealth()
+			runtime.EventsEmit(a.ctx, "graph:health:update", stats)
+		}()
+		return
+	}
+
+	fmt.Println("[Sync] Sincronizando todos os nós do Qdrant com o Frontend (BATCH)...")
+	// Busca um lote grande o suficiente para cobrir o vault do usuário (1500+)
+	points, err := a.qdrant.Search("obsidian_knowledge", nil, 1500)
+	if err != nil {
+		fmt.Printf("[Sync] Erro ao buscar nós para sincronização: %v\n", err)
+		return
+	}
+	var batch []map[string]interface{}
+	for _, p := range points {
+		name, _ := p["name"].(string)
+		if name == "" {
+			continue
+		}
+
+		nodeID := strings.ToLower(name)
+		
+		nodeData := map[string]interface{}{
+			"id":            nodeID,
+			"name":          name,
+			"document-type": "markdown",
+		}
+
+		// ⚖️ Injeta métricas do Cérebro Relacional (se disponível)
+		if a.GEngine != nil {
+			nodeData["pagerank"] = a.GEngine.GetRank(nodeID)
+			nodeData["community"] = a.GEngine.GetCommunity(nodeID)
+			nodeData["betweenness"] = a.GEngine.GetBetweenness(nodeID)
+			
+			h, auth := a.GEngine.GetHITS(nodeID)
+			nodeData["hub"] = h
+			nodeData["authority"] = auth
+		}
+
+		batch = append(batch, nodeData)
+	}
+	
+	// Grava o Cache novinho em folha
+	a.saveTopologyCache(batch)
+
+	// Emite o pacote completo de uma só vez para evitar sobrecarga no motor gráfico
+	runtime.EventsEmit(a.ctx, "graph:nodes:batch", batch)
+	fmt.Printf("[Sync] ✅ %d nós sincronizados em lote.\n", len(batch))
+
+	// 🐝 Automação: Dispara saúde e tecelagem automaticamente após o Sync
+	go func() {
+		time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
+		stats, _ := a.AnalyzeGraphHealth()
+		runtime.EventsEmit(a.ctx, "graph:health:update", stats)
+	}()
+}
+
+// RunVectorDiagnostic executa um Stress Test pontual para validar Gemini + Qdrant Cloud.
+func (a *App) RunVectorDiagnostic() map[string]interface{} {
+	fmt.Println("[BACKEND] 🧪 Iniciando Diagnóstico de Integridade Vetorial...")
+
+	// 🏗️ Garantia de Infraestrutura: Cria as coleções se não existirem antes do teste
+	if err := a.crawler.EnsureCollections(a.ctx); err != nil {
+		fmt.Printf("[BACKEND] Erro ao preparar coleções: %v\n", err)
+		return map[string]interface{}{"success": false, "error": "Falha ao preparar coleções no Qdrant: " + err.Error()}
+	}
+
+	// 🛡️ Segurança: Garante que os serviços estejam inicializados
+	if a.embedder == nil || a.qdrant == nil {
+		fmt.Println("[BACKEND] ⚠️ Motores não inicializados. Tentando reativar...")
+		if err := a.initServices(); err != nil || a.embedder == nil {
+			return map[string]interface{}{"success": false, "error": "Motores de IA n├úo inicializados. Verifique sua Gemini API Key."}
+		}
+	}
+
+	start := time.Now()
+	// 1. Teste de Embedding (Gemini)
+	testText := "Maestro Vector Test: Sincronização Semântica Atômica."
+	embedStart := time.Now()
+	vector, err := a.embedder.GenerateEmbedding(a.ctx, testText)
+	embedDuration := time.Since(embedStart).Milliseconds()
+
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": fmt.Sprintf("Falha no Gemini: %v", err)}
+	}
+
+	// 2. Teste de Gravação e Busca (Qdrant)
+	qdrantStart := time.Now()
+	testID := uint64(999999) // ID Reservado para Testes
+	collection := "obsidian_knowledge"
+
+	// Upsert do ponto de teste
+	err = a.qdrant.UpsertPoint(collection, testID, vector, map[string]interface{}{
+		"name":    "TEST_NODE",
+		"content": testText,
+		"status":  "test",
+	})
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": fmt.Sprintf("Falha no Qdrant (Upsert): %v", err)}
+	}
+
+	// Search para validar recuperação
+	res, err := a.qdrant.Search(collection, vector, 1)
+	qdrantDuration := time.Since(qdrantStart).Milliseconds()
+
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": fmt.Sprintf("Falha no Qdrant (Search): %v", err)}
+	}
+
+	totalDuration := time.Since(start).Milliseconds()
+
+	return map[string]interface{}{
+		"success":        true,
+		"embed_ms":       embedDuration,
+		"qdrant_ms":      qdrantDuration,
+		"total_ms":       totalDuration,
+		"vector_preview": vector[:5], // Mostra apenas os primeiros 5 números do vetor
+		"result_found":   res != nil,
+	}
+}

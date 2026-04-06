@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { GetExecutiveSummary, GetPendingApprovals, ApproveAction, RejectAction, GetLightningStats, GetLatestSpans, ExportTelemetry, GetPromptCandidates, ApprovePromptVariant, ExportRLHFDataset } from '../../wailsjs/go/main/App'
+import { GetExecutiveSummary, GetPendingApprovals, ApproveAction, RejectAction, GetLightningStats, GetLatestSpans, ExportTelemetry, GetPromptCandidates, ApprovePromptVariant, ExportRLHFDataset } from '../../wailsjs/go/core/App'
 
 const summary = ref({
   total_spent_cents: 0,

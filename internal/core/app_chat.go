@@ -1,0 +1,175 @@
+package core
+
+import (
+	"fmt"
+	"time"
+	"hash/fnv"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+)
+
+// AskAgent processa a pergunta em segundo plano para permitir Streaming Real
+func (a *App) AskAgent(agentName string, prompt string) string {
+	fmt.Printf("[BACKEND] AskAgent chamado para: %s\n", agentName)
+
+	if a.chat == nil {
+		fmt.Println("[App] ⚠️ Motor de Chat nulo. Tentando inicialização de emergência...")
+		if err := a.initServices(); err != nil || a.chat == nil {
+			return "⚠️ O motor do Maestro está desligado. Verifique sua Gemini API Key nas configurações."
+		}
+	}
+
+	if agentName == "" {
+		agentName = "gemini"
+	}
+
+	go func() {
+		fmt.Printf("[BACKEND] Iniciando chamada de Chat para: %s\n", agentName)
+		// Usamos "default" como sessionID para manter o histórico em memória nesta sessão do app.
+		response, err := a.chat.Ask(a.ctx, agentName, "default", prompt)
+		if err != nil {
+			fmt.Printf("[BACKEND] ERRO no Chat: %v\n", err)
+			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+				"source":  "ERROR",
+				"content": "❌ Falha na Sinfonia: " + err.Error(),
+			})
+			return
+		}
+
+		fmt.Printf("[BACKEND] Resposta da Orquestração recebida. Injetando na sessão ACP...\n")
+
+		// Injeta a pergunta (prompt completo com RAG e histórico) na sessão ACP ativa
+		// O executor cuidará de enviar via StdIn seguindo o protocolo ndJSON
+		err = a.executor.SendInput("default", response, nil)
+		if err != nil {
+			fmt.Printf("[BACKEND] ERRO ao enviar para o agente: %v\n", err)
+			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+				"source":  "ERROR",
+				"content": "❌ Falha ao comunicar com o agente: " + err.Error(),
+			})
+			return
+		}
+	}()
+
+	return "Orquestrando..."
+}
+
+func (a *App) SendAgentInput(agent string, input string, images []map[string]string) error {
+	// ⚡ Log Premium e Limpo
+	previewInput := input
+	if len(previewInput) > 60 {
+		previewInput = previewInput[:57] + "..."
+	}
+	fmt.Printf("[App] 📡 Sincronizando Mensagem >> Motor: %s | Preview: '%s'\n", agent, previewInput)
+
+	// ⚡ Idioma Dinâmico
+	lang := a.GetConfig().AgentLanguage
+	if lang == "" {
+		lang = "Português do Brasil"
+	}
+
+	// 🧠 Injetor de Memória Semântica com Ligações Nervosas (RAG + Grafo)
+	contextInfo := ""
+	if a.embedder != nil && a.navigator != nil && a.config.ObsidianVaultPath != "" {
+		fmt.Println("[RAG] Explorando ligações nervosas no Grafo de Conhecimento...")
+		vector, err := a.embedder.GenerateEmbedding(a.ctx, input)
+		if err == nil {
+			// 1. Busca as notas âncoras (Top 3)
+			nodes, err := a.qdrant.Search("obsidian_knowledge", vector, 3)
+			if err == nil && len(nodes) > 0 {
+				// 2. Navegação de Sinapses: Expandir o contexto seguindo os links neurais
+				fullContext := a.navigator.ExpandContext(a.ctx, nodes)
+
+				contextInfo = "\n\n[CONHECIMENTO ORQUESTRADO (OBSIDIAN + SINAPSES)]\n"
+				for _, ctxPart := range fullContext {
+					contextInfo += ctxPart + "\n\n"
+				}
+				fmt.Printf("[RAG] Contexto expandido via Grafo com %d fontes.\n", len(fullContext))
+			}
+		} else {
+			fmt.Printf("[RAG] Erro ao gerar embedding para contexto: %v\n", err)
+		}
+	}
+
+	// Diretiva Técnica Dinâmica: Força o idioma em todos os canais (Resposta e Raciocínio).
+	directive := fmt.Sprintf("\n\n[SYSTEM DIRECTIVE: You MUST think, reason, and respond exclusively in %s. This applies to your 'Thought Channel' and your final response. DO NOT use English for internal reasoning. ORGANIZATION RULES: 1. Use clear Markdown headers (##). 2. Use horizontal rules (---) to separate major sections. 3. Keep paragraphs short (max 3 lines). 4. Use bold text for key terms.]", lang)
+
+	// A Sinfonia Final: Contexto + Input + Diretiva
+	enhancedInput := contextInfo + "\n\nMENSAGEM DO USUÁRIO:\n" + input + directive
+
+	sessionID := "acp-session-" + agent
+	err := a.executor.SendInput(sessionID, enhancedInput, images)
+	if err != nil {
+		fmt.Printf("[App] ERRO no SendAgentInput: %v\n", err)
+		return fmt.Errorf("erro ao enviar input para ACP: %v", err)
+	}
+
+	fmt.Printf("[App] ✅ Sinfonia roteada para %s com sucesso via JSON-RPC!\n", agent)
+	return nil
+}
+
+// ConsolidateChatKnowledge analisa o diálogo recente e cria ligações nervosas (sinapses).
+func (a *App) ConsolidateChatKnowledge(sessionID string, chatText string) string {
+	if a.weaver == nil {
+		return "⚠️ Motor de memórias não inicializado."
+	}
+
+	fmt.Printf("[App] Consolidando ligações nervosas para sessão %s...\n", sessionID)
+	err := a.weaver.WeaveChatKnowledge(a.ctx, sessionID, chatText)
+	if err != nil {
+		return "Erro ao tecer sinapses: " + err.Error()
+	}
+
+	return "✅ Sinapses consolidadas com sucesso no Grafo de Conhecimento."
+}
+
+// ResolveConflict executa a decisão do usuário sobre uma contradição semântica detectada.
+func (a *App) ResolveConflict(decision string, subject string, predicate string, oldID uint64, newValue string, sessionID string) string {
+	if decision == "new" {
+		// 1. Marcar o antigo como LEGADO
+		a.qdrant.SetPayload("knowledge_graph", oldID, map[string]interface{}{
+			"status":      "legacy",
+			"archived_at": time.Now().Format(time.RFC3339),
+		})
+
+		// 2. Salvar o NOVO como ativo
+		factText := fmt.Sprintf("%s %s %s", subject, predicate, newValue)
+		vector, _ := a.crawler.Embedder.GenerateEmbedding(a.ctx, factText)
+
+		h := fnv.New64a()
+		h.Write([]byte(factText + sessionID))
+		newID := h.Sum64()
+
+		payload := map[string]interface{}{
+			"id":         newID,
+			"session_id": sessionID,
+			"subject":    subject,
+			"predicate":  predicate,
+			"object":     newValue,
+			"source":     "chat_memory",
+			"status":     "active",
+			"timestamp":  time.Now().Format(time.RFC3339),
+			"content":    factText,
+		}
+
+		a.qdrant.UpsertPoint("knowledge_graph", newID, vector, payload)
+
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"source":  "RESOLVER",
+			"content": fmt.Sprintf("✅ Conflito resolvido: '%s' agora é a verdade sobre '%s'.", newValue, subject),
+		})
+	} else {
+		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
+			"source":  "RESOLVER",
+			"content": "🗺️ Conflito resolvido: Mantida a informação histórica para '" + subject + "'.",
+		})
+	}
+
+	return "Conflito resolvido."
+}
+
+// SendTerminalData envia input do usuário para o processo do terminal (stdin).
+func (a *App) SendTerminalData(agent string, data string) {
+	sessionID := "acp-session-" + agent
+	a.executor.SendInput(sessionID, data, nil)
+}

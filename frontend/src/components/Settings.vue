@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { GetConfig, SaveConfig, GetToolsStatus, InstallTool, SetupTool, AddGeminiAccount, SwitchGeminiAccount, LoginGeminiAccount, AddMCPServer, ListMCPServers, ResetQdrantDB } from '../../wailsjs/go/main/App'
+import { GetConfig, SaveConfig, GetToolsStatus, InstallTool, SetupTool, AddGeminiAccount, SwitchGeminiAccount, LoginGeminiAccount, AddMCPServer, ListMCPServers, ResetQdrantDB } from '../../wailsjs/go/core/App'
 import { EventsOn } from '../../wailsjs/runtime'
 
 const config = ref({

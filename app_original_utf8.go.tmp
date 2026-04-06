@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"Lumaestro/internal/agents"
@@ -34,7 +34,7 @@ type App struct {
 	ctx          context.Context
 	executor     *agents.ACPExecutor
 	orchestrator *agents.Orchestrator
-	legacyExec   *agents.Executor // Apenas para ExecuteCLI fallback se necessário, ou podemos migrar.
+	legacyExec   *agents.Executor // Apenas para ExecuteCLI fallback se necess├írio, ou podemos migrar.
 	ontology     *provider.OntologyService
 	crawler      *obsidian.Crawler
 	qdrant       *provider.QdrantClient
@@ -45,15 +45,15 @@ type App struct {
 	ranker       *neural.Ranker
 	installer    *tools.Installer
 	config       *config.Config
-	muInit       sync.Mutex // 🛡️ Trava de Segurança contra inicialização dupla (HMR/Wails)
+	muInit       sync.Mutex // ­ƒøí´©Å Trava de Seguran├ºa contra inicializa├º├úo dupla (HMR/Wails)
 	
-	// ✨ Motores de Elite (Lightning)
+	// Ô£¿ Motores de Elite (Lightning)
 	LStore       *lightning.DuckDBStore
 	LReflector   *lightning.Reflector
 	LOptimizer   *lightning.Optimizer
 	LRouter      *lightning.LLMRouter
 
-	// 🧠 Cérebro Relacional (V20, V22, V23)
+	// ­ƒºá C├®rebro Relacional (V20, V22, V23)
 	GEngine      *rag.GraphEngine
 	Validator    *rag.AgentValidator
 	Recon        *rag.AgentRecon
@@ -71,12 +71,12 @@ func NewApp() *App {
 
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
-	// 🛡️ Detector de arquivos Go órfãos que quebram o Wails silenciosamente
+	// ­ƒøí´©Å Detector de arquivos Go ├│rf├úos que quebram o Wails silenciosamente
 	checkRogueMainFiles()
 
-	// 🗄️ Iniciar o Banco de Dados Paperclip (Orquestração Corporativa)
+	// ­ƒùä´©Å Iniciar o Banco de Dados Paperclip (Orquestra├º├úo Corporativa)
 	if err := db.InitDB(); err != nil {
-		fmt.Printf("🔴 PANICO SILENCIOSO do Backend no db.InitDB: %v\n", err)
+		fmt.Printf("­ƒö┤ PANICO SILENCIOSO do Backend no db.InitDB: %v\n", err)
 	}
 
 	a.ctx = ctx
@@ -84,60 +84,60 @@ func (a *App) startup(ctx context.Context) {
 	// Sincroniza o PATH imediatamente (Garante que claude/gemini sejam encontrados)
 	a.installer.SyncPath()
 
-	// Iniciar a Escuta de Logs e Terminal (não depende dos motores)
+	// Iniciar a Escuta de Logs e Terminal (n├úo depende dos motores)
 	go a.listenForLogs()
 	go a.listenForInstallerLogs()
 	go a.listenForTerminalOutput()
 
-	// 🚀 Boot Assíncrono: Garante que o WebView esteja pronto antes de emitir eventos
+	// ­ƒÜÇ Boot Ass├¡ncrono: Garante que o WebView esteja pronto antes de emitir eventos
 	go a.bootSequence()
 	
-	// 🧠 Córtex Autônomo (APO): Monitora falhas e otimiza prompts em background
+	// ­ƒºá C├│rtex Aut├┤nomo (APO): Monitora falhas e otimiza prompts em background
 	go a.startAPOWorker()
 }
 
-// bootSequence executa a inicialização dos motores em background,
-// emitindo eventos de diagnóstico para o frontend em tempo real.
-// Roda em goroutine para não bloquear o startup do Wails (evita deadlock no EventsEmit).
+// bootSequence executa a inicializa├º├úo dos motores em background,
+// emitindo eventos de diagn├│stico para o frontend em tempo real.
+// Roda em goroutine para n├úo bloquear o startup do Wails (evita deadlock no EventsEmit).
 func (a *App) bootSequence() {
 	// Delay de 1s para o frontend renderizar e montar o listener Vue de boot:stage
 	time.Sleep(1 * time.Second)
 
-	a.emitBoot("config", "⚙️", "Carregando configurações...")
+	a.emitBoot("config", "ÔÜÖ´©Å", "Carregando configura├º├Áes...")
 
-	// Tenta inicializar os serviços logo na subida
+	// Tenta inicializar os servi├ºos logo na subida
 	if err := a.initServices(); err != nil {
-		fmt.Printf("🔴 PANICO SILENCIOSO do Backend no initServices: %v\n", err)
-		a.emitBoot("error", "🔴", "Falha na inicialização: " + err.Error())
+		fmt.Printf("­ƒö┤ PANICO SILENCIOSO do Backend no initServices: %v\n", err)
+		a.emitBoot("error", "­ƒö┤", "Falha na inicializa├º├úo: " + err.Error())
 		return
 	}
 
-	// Injeta o contexto oficial em todos os serviços APÓS a inicialização para garantir estabilidade
+	// Injeta o contexto oficial em todos os servi├ºos AP├ôS a inicializa├º├úo para garantir estabilidade
 	a.injectContexts()
 
-	// 🚀 Auto-Start: Inicia os agentes e sincroniza conhecimento
+	// ­ƒÜÇ Auto-Start: Inicia os agentes e sincroniza conhecimento
 	if a.config != nil && a.config.GetActiveGeminiKey() != "" {
 		fmt.Println("[BOOT] Maestro Online. Sincronizando conhecimento e restaurando agentes...")
 		
-		// 1. Inicia o Agente Padrão (Se configurado para auto-start)
+		// 1. Inicia o Agente Padr├úo (Se configurado para auto-start)
 		if len(a.config.AutoStartAgents) > 0 {
-			a.emitBoot("agent", "🤖", "Iniciando agente " + a.config.AutoStartAgents[0] + "...")
+			a.emitBoot("agent", "­ƒñû", "Iniciando agente " + a.config.AutoStartAgents[0] + "...")
 			a.StartAgentSession(a.config.AutoStartAgents[0])
 		}
 
-		// 2. Indexação Silenciosa (RAG) - Agora PARALELA e em Background
+		// 2. Indexa├º├úo Silenciosa (RAG) - Agora PARALELA e em Background
 		if a.crawler != nil && a.config.ObsidianVaultPath != "" {
-			a.emitBoot("scan", "✈️", "Sincronizando conhecimento em background...")
-			fmt.Println("[BOOT] ✈️ Iniciando Crawler Paralelo em segundo plano...")
+			a.emitBoot("scan", "Ô£ê´©Å", "Sincronizando conhecimento em background...")
+			fmt.Println("[BOOT] Ô£ê´©Å Iniciando Crawler Paralelo em segundo plano...")
 			
-			// Execução em background para não travar o fluxo de boot da UI
+			// Execu├º├úo em background para n├úo travar o fluxo de boot da UI
 			go func() {
 				a.ScanVault()
-				a.emitBoot("complete", "✅", "Sincronização concluída.")
+				a.emitBoot("complete", "Ô£à", "Sincroniza├º├úo conclu├¡da.")
 			}()
 		}
 
-		// 3. Inicia o Coração (Orquestração Swarm)
+		// 3. Inicia o Cora├º├úo (Orquestra├º├úo Swarm)
 		go a.startOrchestration()
 	}
 }
@@ -150,59 +150,59 @@ func (a *App) ensureCollections() {
 	for _, name := range collections {
 		exists, err := a.qdrant.CheckCollectionExists(name)
 		if err != nil {
-			fmt.Printf("[QDRANT] Erro ao verificar coleção %s: %v\n", name, err)
+			fmt.Printf("[QDRANT] Erro ao verificar cole├º├úo %s: %v\n", name, err)
 			continue
 		}
 
 		if !exists {
-			fmt.Printf("[QDRANT] Criando coleção inexistente: %s...\n", name)
+			fmt.Printf("[QDRANT] Criando cole├º├úo inexistente: %s...\n", name)
 			err := a.qdrant.CreateCollection(name, dimension)
 			if err != nil {
-				fmt.Printf("[QDRANT] Erro fatal ao criar coleção %s: %v\n", name, err)
+				fmt.Printf("[QDRANT] Erro fatal ao criar cole├º├úo %s: %v\n", name, err)
 			} else {
-				fmt.Printf("[QDRANT] Coleção %s criada com sucesso!\n", name)
+				fmt.Printf("[QDRANT] Cole├º├úo %s criada com sucesso!\n", name)
 			}
 		}
 	}
 }
 
-// initServices inicializa os motores de IA e RAG se as configurações permitirem
+// initServices inicializa os motores de IA e RAG se as configura├º├Áes permitirem
 func (a *App) initServices() error {
 	a.muInit.Lock()
 	defer a.muInit.Unlock()
 
 	if a.crawler != nil {
-		return nil // Já inicializado
+		return nil // J├í inicializado
 	}
 
 	cfg, err := config.Load()
 	if err != nil || cfg == nil {
-		fmt.Printf("⚠️ Arquivo de configuração não encontrado ou vazio. Aguardando setup na UI...\n")
-		return nil // Não retorna erro crítico. Permite o App iniciar sem motores.
+		fmt.Printf("ÔÜá´©Å Arquivo de configura├º├úo n├úo encontrado ou vazio. Aguardando setup na UI...\n")
+		return nil // N├úo retorna erro cr├¡tico. Permite o App iniciar sem motores.
 	}
 	a.config = cfg
 
 	// Inicializa Qdrant e Embeddings
-	fmt.Printf("[App] 🔋 Conectando ao motor vetorial Qdrant em: %s\n", cfg.QdrantURL)
-	a.emitBoot("qdrant", "🔋", "Conectando ao banco vetorial Qdrant...")
+	fmt.Printf("[App] ­ƒöï Conectando ao motor vetorial Qdrant em: %s\n", cfg.QdrantURL)
+	a.emitBoot("qdrant", "­ƒöï", "Conectando ao banco vetorial Qdrant...")
 	a.qdrant = provider.NewQdrantClient(cfg.QdrantURL, cfg.QdrantAPIKey)
 
-	fmt.Println("[App] 🧬 Inicializando motor de Embeddings (Gemini)...")
-	a.emitBoot("embeddings", "🧬", "Inicializando motor de Embeddings (Gemini)...")
+	fmt.Println("[App] ­ƒº¼ Inicializando motor de Embeddings (Gemini)...")
+	a.emitBoot("embeddings", "­ƒº¼", "Inicializando motor de Embeddings (Gemini)...")
 	emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
 	if err != nil {
-		fmt.Printf("🔴 FALHA CRÍTICA: Motor de Embeddings não iniciou: %v\n", err)
-		a.emitBoot("error", "🔴", "Motor de Embeddings falhou: "+err.Error())
+		fmt.Printf("­ƒö┤ FALHA CR├ìTICA: Motor de Embeddings n├úo iniciou: %v\n", err)
+		a.emitBoot("error", "­ƒö┤", "Motor de Embeddings falhou: "+err.Error())
 		return err
 	}
 
 	a.embedder = emb
-	// 🧠 Migração para Modo Híbrido: Ontologia e Web Weaving usam API Nativa GenAI (100x mais rápido e imune a falhas de IPC)
+	// ­ƒºá Migra├º├úo para Modo H├¡brido: Ontologia e Web Weaving usam API Nativa GenAI (100x mais r├ípido e imune a falhas de IPC)
 	a.ontology = provider.NewOntologyService(a.ctx, a.embedder)
 
-	// Inicializa os órgãos de RAG e Aprendizado Neural
-	fmt.Println("[App] 🧠 Ativando Córtex Neural (Ranker & Decay)...")
-	a.emitBoot("neural", "🧠", "Ativando Córtex Neural — Esquecimento Natural (Decay)...")
+	// Inicializa os ├│rg├úos de RAG e Aprendizado Neural
+	fmt.Println("[App] ­ƒºá Ativando C├│rtex Neural (Ranker & Decay)...")
+	a.emitBoot("neural", "­ƒºá", "Ativando C├│rtex Neural ÔÇö Esquecimento Natural (Decay)...")
 	a.ranker = neural.NewRanker()
 	a.ranker.Decay()
 
@@ -210,23 +210,23 @@ func (a *App) initServices() error {
 	a.navigator = rag.NewGraphNavigator(a.qdrant, a.ranker)
 	a.weaver = rag.NewKnowledgeWeaver(a.ontology, a.qdrant, a.embedder)
 
-	fmt.Println("[App] 🎭 Orquestrando serviços de Chat...")
-	a.emitBoot("chat", "🎭", "Orquestrando serviços de Chat e RAG...")
+	fmt.Println("[App] ­ƒÄ¡ Orquestrando servi├ºos de Chat...")
+	a.emitBoot("chat", "­ƒÄ¡", "Orquestrando servi├ºos de Chat e RAG...")
 	a.chat = rag.NewChatService(a.legacyExec, a.orchestrator, search, a.navigator, a.embedder, a.installer)
 
-	fmt.Println("[App] 🕸️ Tecendo o Crawler do Obsidian...")
-	a.emitBoot("crawler", "🕸️", "Tecendo o Crawler do Obsidian...")
+	fmt.Println("[App] ­ƒò©´©Å Tecendo o Crawler do Obsidian...")
+	a.emitBoot("crawler", "­ƒò©´©Å", "Tecendo o Crawler do Obsidian...")
 	
-	// 🧠 Cérebro Relacional (V20) e Auditor Neural (V22)
+	// ­ƒºá C├®rebro Relacional (V20) e Auditor Neural (V22)
 	a.GEngine = rag.NewGraphEngine()
-	// O LStore pode estar nulo se Lightning não ativado, então Validator/Recon precisam lidar com isso.
+	// O LStore pode estar nulo se Lightning n├úo ativado, ent├úo Validator/Recon precisam lidar com isso.
 	a.Validator = rag.NewAgentValidator(a.LStore, a.GEngine)
 	a.Recon = rag.NewAgentRecon(a.LStore, a.GEngine, a.qdrant)
 
 	// Injetar GEngine no Crawler (dependendo da assinatura, aqui injetamos globalmente para uso futuro)
 	a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
 
-	// Restaurar Sinapses do DuckDB para a RAM (se disponível)
+	// Restaurar Sinapses do DuckDB para a RAM (se dispon├¡vel)
 	if a.LStore != nil {
 		nodes, edges, err := a.LStore.GetFullGraph()
 		if err == nil {
@@ -237,18 +237,18 @@ func (a *App) initServices() error {
 				a.GEngine.AddEdge(e["source"].(string), e["target"].(string), e["weight"].(float64), e["relation_type"].(string))
 			}
 			a.GEngine.ComputePageRank()
-			fmt.Printf("[App] 🧬 %d nós e %d arestas restaurados para o cérebro em RAM.\n", len(nodes), len(edges))
+			fmt.Printf("[App] ­ƒº¼ %d n├│s e %d arestas restaurados para o c├®rebro em RAM.\n", len(nodes), len(edges))
 		}
 	}
 
-	// 🔥 Injeção de Autonomia: Maestro agora pode comandar o Crawler
+	// ­ƒöÑ Inje├º├úo de Autonomia: Maestro agora pode comandar o Crawler
 	a.executor.Tools.Indexer = a.crawler
 
 	if cfg.LightningEnabled {
-		fmt.Println("[App] ⚡ Ativando Motores Lightning (Analytical & Reflective)...")
-		a.emitBoot("lightning", "⚡", "Iniciando cérebro analítico DuckDB e Reflector...")
+		fmt.Println("[App] ÔÜí Ativando Motores Lightning (Analytical & Reflective)...")
+		a.emitBoot("lightning", "ÔÜí", "Iniciando c├®rebro anal├¡tico DuckDB e Reflector...")
 		
-		// O DuckDBStore é inicializado no main.go, mas garantimos o Reflector aqui
+		// O DuckDBStore ├® inicializado no main.go, mas garantimos o Reflector aqui
 		if a.LStore != nil {
 			a.LReflector = lightning.NewReflector(a.LStore, cfg.ObsidianVaultPath)
 			a.LOptimizer = lightning.NewOptimizer(a.LStore, a.executor.RewardEngine)
@@ -256,10 +256,10 @@ func (a *App) initServices() error {
 		}
 	}
 
-	fmt.Println("[App] ✅ TODOS OS MOTORES LIGADOS! Sistema RAG pronto para decolagem.")
-	a.emitBoot("ready", "✅", "Todos os motores ligados! Maestro pronto.")
+	fmt.Println("[App] Ô£à TODOS OS MOTORES LIGADOS! Sistema RAG pronto para decolagem.")
+	a.emitBoot("ready", "Ô£à", "Todos os motores ligados! Maestro pronto.")
 
-	// Blindagem: Injeta o contexto se as instâncias acabaram de ser criadas
+	// Blindagem: Injeta o contexto se as inst├óncias acabaram de ser criadas
 	a.injectContexts()
 
 	return nil
@@ -270,7 +270,7 @@ func (a *App) injectContexts() {
 	if a.ctx == nil {
 		return
 	}
-	fmt.Printf("[App] 🛡️ Injetando Contexto de Ciclo de Vida do Wails nos motores...\n")
+	fmt.Printf("[App] ­ƒøí´©Å Injetando Contexto de Ciclo de Vida do Wails nos motores...\n")
 	if a.crawler != nil {
 		a.crawler.SetContext(a.ctx)
 	}
@@ -285,7 +285,7 @@ func (a *App) injectContexts() {
 	}
 }
 
-// emitBoot envia um evento de diagnóstico de boot para o frontend
+// emitBoot envia um evento de diagn├│stico de boot para o frontend
 func (a *App) emitBoot(stage string, icon string, message string) {
 	if a.ctx == nil {
 		return
@@ -298,7 +298,7 @@ func (a *App) emitBoot(stage string, icon string, message string) {
 // listenForLogs ouve o Executor ACP (Logs da IA no formato JSON-RPC via STDOUT)
 func (a *App) listenForLogs() {
 	for log := range a.executor.LogChan {
-		// Log discreto apenas para monitoramento técnico de fluxo
+		// Log discreto apenas para monitoramento t├®cnico de fluxo
 		// fmt.Printf("[Wails] Evento agent:log enviado\n")
 		runtime.EventsEmit(a.ctx, "agent:log", log)
 	}
@@ -311,7 +311,7 @@ func (a *App) listenForInstallerLogs() {
 	}
 }
 
-// listenForTerminalOutput (Descontinuado para Renderização no Modo ACP, mantido para evitar quebra)
+// listenForTerminalOutput (Descontinuado para Renderiza├º├úo no Modo ACP, mantido para evitar quebra)
 func (a *App) listenForTerminalOutput() {
 	for td := range a.executor.TerminalOutput {
 		if td.Data == nil {
@@ -331,9 +331,9 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 	fmt.Printf("[BACKEND] AskAgent chamado para: %s\n", agentName)
 
 	if a.chat == nil {
-		fmt.Println("[App] ⚠️ Motor de Chat nulo. Tentando inicialização de emergência...")
+		fmt.Println("[App] ÔÜá´©Å Motor de Chat nulo. Tentando inicializa├º├úo de emerg├¬ncia...")
 		if err := a.initServices(); err != nil || a.chat == nil {
-			return "⚠️ O motor do Maestro está desligado. Verifique sua Gemini API Key nas configurações."
+			return "ÔÜá´©Å O motor do Maestro est├í desligado. Verifique sua Gemini API Key nas configura├º├Áes."
 		}
 	}
 
@@ -343,27 +343,27 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 
 	go func() {
 		fmt.Printf("[BACKEND] Iniciando chamada de Chat para: %s\n", agentName)
-		// Usamos "default" como sessionID para manter o histórico em memória nesta sessão do app.
+		// Usamos "default" como sessionID para manter o hist├│rico em mem├│ria nesta sess├úo do app.
 		response, err := a.chat.Ask(a.ctx, agentName, "default", prompt)
 		if err != nil {
 			fmt.Printf("[BACKEND] ERRO no Chat: %v\n", err)
 			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 				"source":  "ERROR",
-				"content": "❌ Falha na Sinfonia: " + err.Error(),
+				"content": "ÔØî Falha na Sinfonia: " + err.Error(),
 			})
 			return
 		}
 
-		fmt.Printf("[BACKEND] Resposta da Orquestração recebida. Injetando na sessão ACP...\n")
+		fmt.Printf("[BACKEND] Resposta da Orquestra├º├úo recebida. Injetando na sess├úo ACP...\n")
 
-		// Injeta a pergunta (prompt completo com RAG e histórico) na sessão ACP ativa
-		// O executor cuidará de enviar via StdIn seguindo o protocolo ndJSON
+		// Injeta a pergunta (prompt completo com RAG e hist├│rico) na sess├úo ACP ativa
+		// O executor cuidar├í de enviar via StdIn seguindo o protocolo ndJSON
 		err = a.executor.SendInput("default", response, nil)
 		if err != nil {
 			fmt.Printf("[BACKEND] ERRO ao enviar para o agente: %v\n", err)
 			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 				"source":  "ERROR",
-				"content": "❌ Falha ao comunicar com o agente: " + err.Error(),
+				"content": "ÔØî Falha ao comunicar com o agente: " + err.Error(),
 			})
 			return
 		}
@@ -376,72 +376,72 @@ func (a *App) AskAgent(agentName string, prompt string) string {
 func (a *App) ScanVault() string {
 	fmt.Println("[BACKEND] ScanVault disparado assincronamente...")
 
-	// 🕊️ RAG em Segundo Plano: Previne travamento total da UI e do Chat
+	// ­ƒòè´©Å RAG em Segundo Plano: Previne travamento total da UI e do Chat
 	go func() {
-		// 1. Verificação Crítica de Motor e Contexto
+		// 1. Verifica├º├úo Cr├¡tica de Motor e Contexto
 		if a.crawler == nil || a.ctx == nil {
-			fmt.Println("[BACKEND] ⏳ Scan ADIADO: Aguardando prontidão dos motores...")
+			fmt.Println("[BACKEND] ÔÅ│ Scan ADIADO: Aguardando prontid├úo dos motores...")
 			return
 		}
 
 		// 2. Mensagem silenciada no chat UI para respeitar o ambiente Black/Background
 		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 		// 	"source":  "CRAWLER",
-		// 	"content": "🚀 Iniciando Sincronização Semântica Completa em background...",
+		// 	"content": "­ƒÜÇ Iniciando Sincroniza├º├úo Sem├óntica Completa em background...",
 		// })
 
 		err := a.crawler.IndexVault(a.ctx)
 		if err != nil {
-			fmt.Printf("[BACKEND] Erro na Indexação do Vault: %v\n", err)
+			fmt.Printf("[BACKEND] Erro na Indexa├º├úo do Vault: %v\n", err)
 			runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 				"source":  "ERROR",
-				"content": "❌ Erro na Indexação do Obsidian: " + err.Error(),
+				"content": "ÔØî Erro na Indexa├º├úo do Obsidian: " + err.Error(),
 			})
 			return
 		}
 
-		// 2. Indexar a documentação do projeto (Lumaestro Core)
-		// Isso garante que o conhecimento 'RAG' do sistema também esteja disponível.
+		// 2. Indexar a documenta├º├úo do projeto (Lumaestro Core)
+		// Isso garante que o conhecimento 'RAG' do sistema tamb├®m esteja dispon├¡vel.
 		fmt.Println("[BACKEND] Indexando documentos internos do sistema...")
 		err = a.crawler.IndexSystemDocs(a.ctx, "./")
 		if err != nil {
 			fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
 		}
 
-		// 3. Indexar Repositórios Dinâmicos Importados e fazer Code Crawl
+		// 3. Indexar Reposit├│rios Din├ómicos Importados e fazer Code Crawl
 		if len(a.config.ExternalProjects) > 0 {
-			fmt.Println("[BACKEND] Iniciando expansão radial (Projetos satélites)...")
+			fmt.Println("[BACKEND] Iniciando expans├úo radial (Projetos sat├®lites)...")
 			err = a.crawler.IndexRepositories(a.ctx, a.config.ExternalProjects)
 			if err != nil {
 				fmt.Printf("[BACKEND] Erro ao sincronizar external projects: %v\n", err)
 			}
 		}
 
-		// Silenciado para não sujar o Chat interativo
+		// Silenciado para n├úo sujar o Chat interativo
 		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 		// 	"source":  "CRAWLER",
-		// 	"content": "🏛️ Sincronização semântica completa concluída com sucesso!",
+		// 	"content": "­ƒÅø´©Å Sincroniza├º├úo sem├óntica completa conclu├¡da com sucesso!",
 		// })
 
-		// 3. Força a atualização visual de todos os nós (isolados e conectados)
+		// 3. For├ºa a atualiza├º├úo visual de todos os n├│s (isolados e conectados)
 		os.Remove(".lumaestro_topology.json") // Invalida Topology Cache
 		a.SyncAllNodes()
 	}()
 
-	return "Indexação iniciada em segundo plano. O Maestro agora está integrando seu Obsidian e as memórias do sistema."
+	return "Indexa├º├úo iniciada em segundo plano. O Maestro agora est├í integrando seu Obsidian e as mem├│rias do sistema."
 }
 
-// FullSync limpa o cache e inicia uma indexação completa atômica.
+// FullSync limpa o cache e inicia uma indexa├º├úo completa at├┤mica.
 func (a *App) FullSync() string {
 	if a.crawler == nil {
-		return "⚠️ Motor de indexação indisponível."
+		return "ÔÜá´©Å Motor de indexa├º├úo indispon├¡vel."
 	}
-	fmt.Println("[BACKEND] 🔄 Solicitado FullSync Atômico. Limpando cache...")
+	fmt.Println("[BACKEND] ­ƒöä Solicitado FullSync At├┤mico. Limpando cache...")
 	a.crawler.PurgeCache()
 	return a.ScanVault()
 }
 
-// AddExternalProject vincula um repositório inteiro e o expande via Crawler Radial
+// AddExternalProject vincula um reposit├│rio inteiro e o expande via Crawler Radial
 func (a *App) AddExternalProject(path string, coreNode string, includeCode bool) map[string]interface{} {
 	cfg, err := config.Load()
 	if err != nil {
@@ -450,7 +450,7 @@ func (a *App) AddExternalProject(path string, coreNode string, includeCode bool)
 
 	for _, p := range cfg.ExternalProjects {
 		if p.Path == path {
-			return map[string]interface{}{"success": false, "error": "Repositório já mapeado!"}
+			return map[string]interface{}{"success": false, "error": "Reposit├│rio j├í mapeado!"}
 		}
 	}
 
@@ -463,13 +463,13 @@ func (a *App) AddExternalProject(path string, coreNode string, includeCode bool)
 	config.Save(*cfg)
 	a.config = cfg
 
-	// Dispara a sincronização imediatamente e de forma limpa (Sincronizando Nodes via EventsEmit com ScanVault)
+	// Dispara a sincroniza├º├úo imediatamente e de forma limpa (Sincronizando Nodes via EventsEmit com ScanVault)
 	_ = a.ScanVault()
 
-	return map[string]interface{}{"success": true, "message": "Projetos satélite vinculados e auto-scan de gravidade acionado."}
+	return map[string]interface{}{"success": true, "message": "Projetos sat├®lite vinculados e auto-scan de gravidade acionado."}
 }
 
-// GetExternalProjects retorna os repositórios em formato JSON para Renderização no frontend (Settings)
+// GetExternalProjects retorna os reposit├│rios em formato JSON para Renderiza├º├úo no frontend (Settings)
 func (a *App) GetExternalProjects() []config.ProjectScan {
 	if a.config != nil {
 		return a.config.ExternalProjects
@@ -480,7 +480,7 @@ func (a *App) GetExternalProjects() []config.ProjectScan {
 // SelectDirectory abre o explorador de arquivos nativo do S.O. para escolher uma pasta
 func (a *App) SelectDirectory() string {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Selecione o Repositório do Projeto",
+		Title: "Selecione o Reposit├│rio do Projeto",
 	})
 	if err != nil {
 		return ""
@@ -491,10 +491,10 @@ func (a *App) SelectDirectory() string {
 // ResetQdrantDB apaga permanentemente o banco de dados remoto e limpa o cache local.
 func (a *App) ResetQdrantDB() string {
 	if a.qdrant == nil || a.ctx == nil {
-		return "⚠️ Erro: Cliente Qdrant não inicializado."
+		return "ÔÜá´©Å Erro: Cliente Qdrant n├úo inicializado."
 	}
 
-	fmt.Println("[RESET] 🚨 Iniciando Reset do Banco de Dados Qdrant...")
+	fmt.Println("[RESET] ­ƒÜ¿ Iniciando Reset do Banco de Dados Qdrant...")
 	
 	collections := []string{"obsidian_knowledge", "knowledge_graph"}
 	for _, name := range collections {
@@ -503,18 +503,18 @@ func (a *App) ResetQdrantDB() string {
 			fmt.Printf("[RESET] Erro ao excluir %s: %v\n", name, err)
 			continue
 		}
-		fmt.Printf("[RESET] ✅ Coleção %s excluída.\n", name)
+		fmt.Printf("[RESET] Ô£à Cole├º├úo %s exclu├¡da.\n", name)
 	}
 
 	// 2. Limpa Cache Local
 	if a.crawler != nil {
-		fmt.Println("[RESET] 🧹 Limpando cache do Crawler...")
+		fmt.Println("[RESET] ­ƒº╣ Limpando cache do Crawler...")
 		a.crawler.PurgeCache()
 	}
 	os.Remove(".lumaestro_topology.json") // Expurga cache visual 3D
 
 	// 3. Recria Infraestrutura do zero
-	fmt.Println("[RESET] 🏗️ Recriando infraestrutura (3072 dim)...")
+	fmt.Println("[RESET] ­ƒÅù´©Å Recriando infraestrutura (3072 dim)...")
 	if a.crawler != nil {
 		a.crawler.EnsureCollections(a.ctx)
 	}
@@ -522,26 +522,26 @@ func (a *App) ResetQdrantDB() string {
 	// 4. Notifica o Frontend
 	runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 		"source":  "SYSTEM",
-		"content": "☢️ RESET COMPLETO: Banco de dados Qdrant e cache local foram expurgados.",
+		"content": "Ôÿó´©Å RESET COMPLETO: Banco de dados Qdrant e cache local foram expurgados.",
 	})
 
-	return "✅ O banco de dados foi resetado com sucesso! Inicie um novo SCAN para repovoar."
+	return "Ô£à O banco de dados foi resetado com sucesso! Inicie um novo SCAN para repovoar."
 }
 
-// PurgeCache limpa todo o histórico de indexação local.
+// PurgeCache limpa todo o hist├│rico de indexa├º├úo local.
 func (a *App) PurgeCache() string {
 	os.Remove(".lumaestro_topology.json") // Invalida Topology Cache
 	if a.crawler == nil {
-		return "⚠️ Motor de indexação indisponível."
+		return "ÔÜá´©Å Motor de indexa├º├úo indispon├¡vel."
 	}
 	err := a.crawler.PurgeCache()
 	if err != nil {
 		return fmt.Sprintf("Erro ao limpar cache: %v", err)
 	}
-	return "Cache de indexação limpo com sucesso!"
+	return "Cache de indexa├º├úo limpo com sucesso!"
 }
 
-// Sincronização e I/O Desacoplado do Motor Físico
+// Sincroniza├º├úo e I/O Desacoplado do Motor F├¡sico
 func (a *App) saveTopologyCache(batch []map[string]interface{}) {
 	data, err := json.Marshal(batch)
 	if err == nil {
@@ -568,22 +568,22 @@ func (a *App) SyncAllNodes() {
 	// 1. TENTA TOPOLOGY CACHE (IGNORA O QDRANT INSTANTANEAMENTE SE EXISTIR)
 	cachedBatch := a.loadTopologyCache()
 	if cachedBatch != nil && len(cachedBatch) > 0 {
-		fmt.Printf("[Sync] ⚡ Carregando %d nós instantaneamente via Fast Topology Cache (0 delay de infraestrutura)...\n", len(cachedBatch))
+		fmt.Printf("[Sync] ÔÜí Carregando %d n├│s instantaneamente via Fast Topology Cache (0 delay de infraestrutura)...\n", len(cachedBatch))
 		runtime.EventsEmit(a.ctx, "graph:nodes:batch", cachedBatch)
 		
 		go func() {
-			time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
+			time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor f├¡sico
 			stats, _ := a.AnalyzeGraphHealth()
 			runtime.EventsEmit(a.ctx, "graph:health:update", stats)
 		}()
 		return
 	}
 
-	fmt.Println("[Sync] Sincronizando todos os nós do Qdrant com o Frontend (BATCH)...")
-	// Busca um lote grande o suficiente para cobrir o vault do usuário (1500+)
+	fmt.Println("[Sync] Sincronizando todos os n├│s do Qdrant com o Frontend (BATCH)...")
+	// Busca um lote grande o suficiente para cobrir o vault do usu├írio (1500+)
 	points, err := a.qdrant.Search("obsidian_knowledge", nil, 1500)
 	if err != nil {
-		fmt.Printf("[Sync] Erro ao buscar nós para sincronização: %v\n", err)
+		fmt.Printf("[Sync] Erro ao buscar n├│s para sincroniza├º├úo: %v\n", err)
 		return
 	}
 	var batch []map[string]interface{}
@@ -601,7 +601,7 @@ func (a *App) SyncAllNodes() {
 			"document-type": "markdown",
 		}
 
-		// ✨ Injeta métricas do Cérebro Relacional (se disponível)
+		// Ô£¿ Injeta m├®tricas do C├®rebro Relacional (se dispon├¡vel)
 		if a.GEngine != nil {
 			nodeData["pagerank"] = a.GEngine.GetRank(nodeID)
 			nodeData["community"] = a.GEngine.GetCommunity(nodeID)
@@ -618,13 +618,13 @@ func (a *App) SyncAllNodes() {
 	// Grava o Cache novinho em folha
 	a.saveTopologyCache(batch)
 
-	// Emite o pacote completo de uma só vez para evitar sobrecarga no motor gráfico
+	// Emite o pacote completo de uma s├│ vez para evitar sobrecarga no motor gr├ífico
 	runtime.EventsEmit(a.ctx, "graph:nodes:batch", batch)
-	fmt.Printf("[Sync] ✅ %d nós sincronizados em lote.\n", len(batch))
+	fmt.Printf("[Sync] Ô£à %d n├│s sincronizados em lote.\n", len(batch))
 
-	// 🪐 Automação: Dispara saúde e tecelagem automaticamente após o Sync
+	// ­ƒ¬É Automa├º├úo: Dispara sa├║de e tecelagem automaticamente ap├│s o Sync
 	go func() {
-		time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
+		time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor f├¡sico
 		stats, _ := a.AnalyzeGraphHealth()
 		runtime.EventsEmit(a.ctx, "graph:health:update", stats)
 	}()
@@ -632,25 +632,25 @@ func (a *App) SyncAllNodes() {
 
 // RunVectorDiagnostic executa um Stress Test pontual para validar Gemini + Qdrant Cloud.
 func (a *App) RunVectorDiagnostic() map[string]interface{} {
-	fmt.Println("[BACKEND] 🧪 Iniciando Diagnóstico de Integridade Vetorial...")
+	fmt.Println("[BACKEND] ­ƒº¬ Iniciando Diagn├│stico de Integridade Vetorial...")
 
-	// 🏗️ Garantia de Infraestrutura: Cria as coleções se não existirem antes do teste
+	// ­ƒÅù´©Å Garantia de Infraestrutura: Cria as cole├º├Áes se n├úo existirem antes do teste
 	if err := a.crawler.EnsureCollections(a.ctx); err != nil {
-		fmt.Printf("[BACKEND] Erro ao preparar coleções: %v\n", err)
-		return map[string]interface{}{"success": false, "error": "Falha ao preparar coleções no Qdrant: " + err.Error()}
+		fmt.Printf("[BACKEND] Erro ao preparar cole├º├Áes: %v\n", err)
+		return map[string]interface{}{"success": false, "error": "Falha ao preparar cole├º├Áes no Qdrant: " + err.Error()}
 	}
 
-	// 🛡️ Segurança: Garante que os serviços estejam inicializados
+	// ­ƒøí´©Å Seguran├ºa: Garante que os servi├ºos estejam inicializados
 	if a.embedder == nil || a.qdrant == nil {
-		fmt.Println("[BACKEND] ⚠️ Motores não inicializados. Tentando reativar...")
+		fmt.Println("[BACKEND] ÔÜá´©Å Motores n├úo inicializados. Tentando reativar...")
 		if err := a.initServices(); err != nil || a.embedder == nil {
-			return map[string]interface{}{"success": false, "error": "Motores de IA não inicializados. Verifique sua Gemini API Key."}
+			return map[string]interface{}{"success": false, "error": "Motores de IA n├úo inicializados. Verifique sua Gemini API Key."}
 		}
 	}
 
 	start := time.Now()
 	// 1. Teste de Embedding (Gemini)
-	testText := "Maestro Vector Test: Sincronização Semântica Atômica."
+	testText := "Maestro Vector Test: Sincroniza├º├úo Sem├óntica At├┤mica."
 	embedStart := time.Now()
 	vector, err := a.embedder.GenerateEmbedding(a.ctx, testText)
 	embedDuration := time.Since(embedStart).Milliseconds()
@@ -659,7 +659,7 @@ func (a *App) RunVectorDiagnostic() map[string]interface{} {
 		return map[string]interface{}{"success": false, "error": fmt.Sprintf("Falha no Gemini: %v", err)}
 	}
 
-	// 2. Teste de Gravação e Busca (Qdrant)
+	// 2. Teste de Grava├º├úo e Busca (Qdrant)
 	qdrantStart := time.Now()
 	testID := uint64(999999) // ID Reservado para Testes
 	collection := "obsidian_knowledge"
@@ -674,7 +674,7 @@ func (a *App) RunVectorDiagnostic() map[string]interface{} {
 		return map[string]interface{}{"success": false, "error": fmt.Sprintf("Falha no Qdrant (Upsert): %v", err)}
 	}
 
-	// Search para validar recuperação
+	// Search para validar recupera├º├úo
 	res, err := a.qdrant.Search(collection, vector, 1)
 	qdrantDuration := time.Since(qdrantStart).Milliseconds()
 
@@ -689,12 +689,12 @@ func (a *App) RunVectorDiagnostic() map[string]interface{} {
 		"embed_ms":       embedDuration,
 		"qdrant_ms":      qdrantDuration,
 		"total_ms":       totalDuration,
-		"vector_preview": vector[:5], // Mostra apenas os primeiros 5 números do vetor
+		"vector_preview": vector[:5], // Mostra apenas os primeiros 5 n├║meros do vetor
 		"result_found":   res != nil,
 	}
 }
 
-// CheckConnection verifica se o Qdrant está acessível e se o motor de RAG (Crawler) já decolou.
+// CheckConnection verifica se o Qdrant est├í acess├¡vel e se o motor de RAG (Crawler) j├í decolou.
 func (a *App) CheckConnection() bool {
 	if a.qdrant == nil || a.config == nil || a.crawler == nil {
 		fmt.Println("[BACKEND-UI] CheckConnection: Motores ainda aquecendo...")
@@ -703,9 +703,9 @@ func (a *App) CheckConnection() bool {
 	return true
 }
 
-// GetToolsStatus verifica se as IAs CLIs estão instaladas no PATH e os status de autenticação
+// GetToolsStatus verifica se as IAs CLIs est├úo instaladas no PATH e os status de autentica├º├úo
 func (a *App) GetToolsStatus() map[string]bool {
-	// Reduzimos o ruído no log para esse porque ele é feito a cada refresh
+	// Reduzimos o ru├¡do no log para esse porque ele ├® feito a cada refresh
 	return map[string]bool{
 		"gemini":      a.installer.CheckStatus("gemini"),
 		"claude":      a.installer.CheckStatus("claude"),
@@ -715,7 +715,7 @@ func (a *App) GetToolsStatus() map[string]bool {
 	}
 }
 
-// InstallTool dispara a instalação via CLI oficial
+// InstallTool dispara a instala├º├úo via CLI oficial
 func (a *App) InstallTool(name string) string {
 	var err error
 	switch name {
@@ -730,9 +730,9 @@ func (a *App) InstallTool(name string) string {
 	}
 
 	if err != nil {
-		return "Erro na instalação: " + err.Error()
+		return "Erro na instala├º├úo: " + err.Error()
 	}
-	return "Instalação de " + name + " concluída com sucesso!"
+	return "Instala├º├úo de " + name + " conclu├¡da com sucesso!"
 }
 
 // FixEnvironment tenta corrigir caminhos de ambiente manualmente
@@ -744,14 +744,14 @@ func (a *App) FixEnvironment() string {
 	return "Ambiente corrigido com sucesso! Reinicie o aplicativo."
 }
 
-// GetConfig retorna as configurações atuais para o Vue
+// GetConfig retorna as configura├º├Áes atuais para o Vue
 func (a *App) GetConfig() *config.Config {
 	cfg, _ := config.Load()
 	fmt.Printf("[BACKEND-UI] GetConfig disparado pelo frontend. Enviando URL Qdrant: %s\n", cfg.QdrantURL)
 	return cfg
 }
 
-// SaveConfig persiste as novas configurações no config.json
+// SaveConfig persiste as novas configura├º├Áes no config.json
 func (a *App) SaveConfig(cfg config.Config) string {
 	err := config.Save(cfg)
 	if err != nil {
@@ -759,7 +759,7 @@ func (a *App) SaveConfig(cfg config.Config) string {
 	}
 
 	a.startup(a.ctx)
-	return "Configurações salvas e serviços reiniciados!"
+	return "Configura├º├Áes salvas e servi├ºos reiniciados!"
 }
 
 // SetupTool abre um terminal externo - Legado.
@@ -768,52 +768,52 @@ func (a *App) SetupTool(name string) string {
 	if err != nil {
 		return "Erro ao abrir terminal: " + err.Error()
 	}
-	return "Janela de configuração aberta!"
+	return "Janela de configura├º├úo aberta!"
 }
 
-// StartLoginSession inicia uma sessão de terminal interativa interna para login.
+// StartLoginSession inicia uma sess├úo de terminal interativa interna para login.
 func (a *App) StartLoginSession(agent string) string {
 	binary, args := a.installer.GetSetupCommand(agent)
 	sessionID := "login-session-" + agent
 
 	err := a.legacyExec.StartCustomSession(a.ctx, agent, binary, args, sessionID)
 	if err != nil {
-		return "Erro ao iniciar sessão de login: " + err.Error()
+		return "Erro ao iniciar sess├úo de login: " + err.Error()
 	}
 
 	runtime.EventsEmit(a.ctx, "terminal:started", map[string]interface{}{
 		"agent":     agent,
-		"mode":      "Configuração/Login",
+		"mode":      "Configura├º├úo/Login",
 		"isRealPTY": true,
 	})
 
-	return "Sessão de login iniciada no terminal interno."
+	return "Sess├úo de login iniciada no terminal interno."
 }
 
 // ============================================================
-// TERMINAL ACP — JSON RPC 2.0 (O CÉREBRO)
+// TERMINAL ACP ÔÇö JSON RPC 2.0 (O C├ëREBRO)
 // ============================================================
 
 // StartAgentSession inicia a CLI do Gemini em modo seguro ACP (JSON RPC 2.0).
 func (a *App) StartAgentSession(agent string) error {
 	sessionID := "acp-session-" + agent
 
-	// 🛡️ Trava de Segurança: Não inicia se já houver uma sessão ativa ou iniciando para este agente.
+	// ­ƒøí´©Å Trava de Seguran├ºa: N├úo inicia se j├í houver uma sess├úo ativa ou iniciando para este agente.
 	a.executor.Mu.Lock()
 	_, exists := a.executor.ActiveSessions[sessionID]
 	a.executor.Mu.Unlock()
 
 	if exists {
-		fmt.Printf("[App] Agente %s já está no Ar. Orquestra pronta.\n", agent)
+		fmt.Printf("[App] Agente %s j├í est├í no Ar. Orquestra pronta.\n", agent)
 		return nil
 	}
 
 	fmt.Printf("[App] Iniciando agente: %s\n", agent)
-	// No primeiro boot ou reinício, passamos loadSessionID como "LATEST" para carregar a última Sinfonia.
+	// No primeiro boot ou rein├¡cio, passamos loadSessionID como "LATEST" para carregar a ├║ltima Sinfonia.
 	return a.executor.StartSession(a.ctx, agent, sessionID, "LATEST", uuid.Nil, nil)
 }
 
-// StartBackgroundAgentSession cria uma instância paralela silenciosa exclusiva para o processamento de RAG
+// StartBackgroundAgentSession cria uma inst├óncia paralela silenciosa exclusiva para o processamento de RAG
 func (a *App) StartBackgroundAgentSession(agent string) error {
 	sessionID := "acp-session-background-" + agent
 
@@ -822,12 +822,12 @@ func (a *App) StartBackgroundAgentSession(agent string) error {
 	a.executor.Mu.Unlock()
 
 	if exists {
-		fmt.Printf("[App] Agente de Background (%s) já está online.\n", agent)
+		fmt.Printf("[App] Agente de Background (%s) j├í est├í online.\n", agent)
 		return nil
 	}
 
 	fmt.Printf("[App] Iniciando Agente de BACKGROUND (Black): %s\n", agent)
-	// Background NUNCA deve carregar histórico (LATEST) para não misturar os contextos. Inicia sempre limpo.
+	// Background NUNCA deve carregar hist├│rico (LATEST) para n├úo misturar os contextos. Inicia sempre limpo.
 	return a.executor.StartSession(a.ctx, agent, sessionID, "", uuid.Nil, nil)
 }
 
@@ -839,7 +839,7 @@ func (a *App) ListAgentSessions(agent string) ([]agents.SessionInfo, error) {
 	a.executor.Mu.Unlock()
 
 	if !ok {
-		return nil, fmt.Errorf("inicie o agente antes de listar o histórico")
+		return nil, fmt.Errorf("inicie o agente antes de listar o hist├│rico")
 	}
 
 	return a.executor.ListSessions(session)
@@ -847,12 +847,12 @@ func (a *App) ListAgentSessions(agent string) ([]agents.SessionInfo, error) {
 
 // LoadAgentSession encerra a atual e carrega uma antiga (Checkpoint)
 func (a *App) LoadAgentSession(agent string, acpSessionID string) error {
-	fmt.Printf("[App] Trocando para sessão: %s\n", acpSessionID)
+	fmt.Printf("[App] Trocando para sess├úo: %s\n", acpSessionID)
 	sessionID := "acp-session-" + agent
 	return a.executor.StartSession(a.ctx, agent, sessionID, acpSessionID, uuid.Nil, nil)
 }
 
-// NewAgentSession força a criação de um novo chat (limpa o contexto)
+// NewAgentSession for├ºa a cria├º├úo de um novo chat (limpa o contexto)
 func (a *App) NewAgentSession(agent string) error {
 	fmt.Println("[App] Iniciando NOVO chat (limpando contexto)...")
 	sessionID := "acp-session-" + agent
@@ -860,29 +860,29 @@ func (a *App) NewAgentSession(agent string) error {
 }
 
 func (a *App) SendAgentInput(agent string, input string, images []map[string]string) error {
-	// 🚨 Log Premium e Limpo
+	// ­ƒÜ¿ Log Premium e Limpo
 	previewInput := input
 	if len(previewInput) > 60 {
 		previewInput = previewInput[:57] + "..."
 	}
-	fmt.Printf("[App] 📨 Sincronizando Mensagem >> Motor: %s | Preview: '%s'\n", agent, previewInput)
+	fmt.Printf("[App] ­ƒô¿ Sincronizando Mensagem >> Motor: %s | Preview: '%s'\n", agent, previewInput)
 
-	// 🚨 Idioma Dinâmico
+	// ­ƒÜ¿ Idioma Din├ómico
 	lang := a.GetConfig().AgentLanguage
 	if lang == "" {
-		lang = "Português do Brasil"
+		lang = "Portugu├¬s do Brasil"
 	}
 
-	// 🧠 Injetor de Memória Semântica com Ligações Nervosas (RAG + Grafo)
+	// ­ƒºá Injetor de Mem├│ria Sem├óntica com Liga├º├Áes Nervosas (RAG + Grafo)
 	contextInfo := ""
 	if a.embedder != nil && a.navigator != nil && a.config.ObsidianVaultPath != "" {
-		fmt.Println("[RAG] Explorando ligações nervosas no Grafo de Conhecimento...")
+		fmt.Println("[RAG] Explorando liga├º├Áes nervosas no Grafo de Conhecimento...")
 		vector, err := a.embedder.GenerateEmbedding(a.ctx, input)
 		if err == nil {
-			// 1. Busca as notas âncoras (Top 3)
+			// 1. Busca as notas ├óncoras (Top 3)
 			nodes, err := a.qdrant.Search("obsidian_knowledge", vector, 3)
 			if err == nil && len(nodes) > 0 {
-				// 2. Navegação de Sinapses: Expandir o contexto seguindo os links neurais
+				// 2. Navega├º├úo de Sinapses: Expandir o contexto seguindo os links neurais
 				fullContext := a.navigator.ExpandContext(a.ctx, nodes)
 
 				contextInfo = "\n\n[CONHECIMENTO ORQUESTRADO (OBSIDIAN + SINAPSES)]\n"
@@ -896,11 +896,11 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		}
 	}
 
-	// Diretiva Técnica Dinâmica: Força o idioma em todos os canais (Resposta e Raciocínio).
+	// Diretiva T├®cnica Din├ómica: For├ºa o idioma em todos os canais (Resposta e Racioc├¡nio).
 	directive := fmt.Sprintf("\n\n[SYSTEM DIRECTIVE: You MUST think, reason, and respond exclusively in %s. This applies to your 'Thought Channel' and your final response. DO NOT use English for internal reasoning. ORGANIZATION RULES: 1. Use clear Markdown headers (##). 2. Use horizontal rules (---) to separate major sections. 3. Keep paragraphs short (max 3 lines). 4. Use bold text for key terms.]", lang)
 
 	// A Sinfonia Final: Contexto + Input + Diretiva
-	enhancedInput := contextInfo + "\n\nMENSAGEM DO USUÁRIO:\n" + input + directive
+	enhancedInput := contextInfo + "\n\nMENSAGEM DO USU├üRIO:\n" + input + directive
 
 	sessionID := "acp-session-" + agent
 	err := a.executor.SendInput(sessionID, enhancedInput, images)
@@ -909,26 +909,26 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		return fmt.Errorf("erro ao enviar input para ACP: %v", err)
 	}
 
-	fmt.Printf("[App] ✅ Sinfonia roteada para %s com sucesso via JSON-RPC!\n", agent)
+	fmt.Printf("[App] Ô£à Sinfonia roteada para %s com sucesso via JSON-RPC!\n", agent)
 	return nil
 }
 
-// ConsolidateChatKnowledge analisa o diálogo recente e cria ligações nervosas (sinapses).
+// ConsolidateChatKnowledge analisa o di├ílogo recente e cria liga├º├Áes nervosas (sinapses).
 func (a *App) ConsolidateChatKnowledge(sessionID string, chatText string) string {
 	if a.weaver == nil {
-		return "⚠️ Motor de memórias não inicializado."
+		return "ÔÜá´©Å Motor de mem├│rias n├úo inicializado."
 	}
 
-	fmt.Printf("[App] Consolidando ligações nervosas para sessão %s...\n", sessionID)
+	fmt.Printf("[App] Consolidando liga├º├Áes nervosas para sess├úo %s...\n", sessionID)
 	err := a.weaver.WeaveChatKnowledge(a.ctx, sessionID, chatText)
 	if err != nil {
 		return "Erro ao tecer sinapses: " + err.Error()
 	}
 
-	return "✅ Sinapses consolidadas com sucesso no Grafo de Conhecimento."
+	return "Ô£à Sinapses consolidadas com sucesso no Grafo de Conhecimento."
 }
 
-// ResolveConflict executa a decisão do usuário sobre uma contradição semântica detectada.
+// ResolveConflict executa a decis├úo do usu├írio sobre uma contradi├º├úo sem├óntica detectada.
 func (a *App) ResolveConflict(decision string, subject string, predicate string, oldID uint64, newValue string, sessionID string) string {
 	if decision == "new" {
 		// 1. Marcar o antigo como LEGADO
@@ -961,12 +961,12 @@ func (a *App) ResolveConflict(decision string, subject string, predicate string,
 
 		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 			"source":  "RESOLVER",
-			"content": fmt.Sprintf("✅ Conflito resolvido: '%s' agora é a verdade sobre '%s'.", newValue, subject),
+			"content": fmt.Sprintf("Ô£à Conflito resolvido: '%s' agora ├® a verdade sobre '%s'.", newValue, subject),
 		})
 	} else {
 		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 			"source":  "RESOLVER",
-			"content": fmt.Sprintf("🏛️ Conflito resolvido: Mantida a informação histórica para '%s'.", subject),
+			"content": fmt.Sprintf("­ƒÅø´©Å Conflito resolvido: Mantida a informa├º├úo hist├│rica para '%s'.", subject),
 		})
 	}
 
@@ -977,7 +977,7 @@ func (a *App) GetProjectDoc(name string) (string, error) {
 	if !strings.HasSuffix(name, ".md") {
 		name += ".md"
 	}
-	fmt.Printf("[App] Lendo documentação: %s\n", name)
+	fmt.Printf("[App] Lendo documenta├º├úo: %s\n", name)
 	path := filepath.Join(".", "docs", name)
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -993,9 +993,9 @@ func (a *App) GetNodeDetails(nodeID string) (map[string]interface{}, error) {
 	// 1. Tentar buscar em Notas do Obsidian ou Sistema (Chave: name)
 	res, err := a.qdrant.SearchByField("obsidian_knowledge", "name", nodeID)
 
-	// Fallback: Se não achar campo exato (slug mismatch), tentar busca similar textual
+	// Fallback: Se n├úo achar campo exato (slug mismatch), tentar busca similar textual
 	if err != nil || res == nil {
-		fmt.Printf("[Audit] Nó '%s' não encontrado por campo exato.\n", nodeID)
+		fmt.Printf("[Audit] N├│ '%s' n├úo encontrado por campo exato.\n", nodeID)
 	}
 
 	if err == nil && res != nil {
@@ -1003,46 +1003,46 @@ func (a *App) GetNodeDetails(nodeID string) (map[string]interface{}, error) {
 			"path":    res["path"],
 			"content": res["content"],
 			"type":    res["type"],
-			"source":  res["document-type"], // Retorna se é "system" ou "vault"
+			"source":  res["document-type"], // Retorna se ├® "system" ou "vault"
 		}, nil
 	}
 
-	// 2. Tentar buscar em Memórias de Chat (Chave: subject)
+	// 2. Tentar buscar em Mem├│rias de Chat (Chave: subject)
 	res, err = a.qdrant.SearchByField("knowledge_graph", "subject", nodeID)
 	if err == nil && res != nil {
 		return map[string]interface{}{
-			"path":    "Memória de Chat",
+			"path":    "Mem├│ria de Chat",
 			"content": res["content"],
 			"type":    "memory",
 			"source":  "RAG Synapse",
 		}, nil
 	}
 
-	// 3. Fallback: Se não existe no banco, é uma dedução/especulação da IA (Nó Virtual)
+	// 3. Fallback: Se n├úo existe no banco, ├® uma dedu├º├úo/especula├º├úo da IA (N├│ Virtual)
 	return map[string]interface{}{
 		"path":    "Conceito Neural",
-		"content": fmt.Sprintf("O nó '%s' é um conceito abstrato detectado pela IA durante a tecelagem do conhecimento. Ele ainda não possui uma nota física dedicada no seu Obsidian.", nodeID),
+		"content": fmt.Sprintf("O n├│ '%s' ├® um conceito abstrato detectado pela IA durante a tecelagem do conhecimento. Ele ainda n├úo possui uma nota f├¡sica dedicada no seu Obsidian.", nodeID),
 		"type":    "virtual",
-		"source":  "Inteligência Artificial",
+		"source":  "Intelig├¬ncia Artificial",
 	}, nil
 }
 
-// AnalyzeGraphHealth analisa a integridade semântica do grafo.
+// AnalyzeGraphHealth analisa a integridade sem├óntica do grafo.
 func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
-	fmt.Println("[Audit] Analisando saúde do Grafo de Contexto...")
+	fmt.Println("[Audit] Analisando sa├║de do Grafo de Contexto...")
 
 	count, err := a.qdrant.CountPoints("obsidian_knowledge")
 	if err != nil {
 		return nil, err
 	}
 
-	// Cálculo de Densidade Orgânica (Progressão Logarítmica)
-	// Com 816 notas, queremos um valor que faça sentido visual.
+	// C├ílculo de Densidade Org├ónica (Progress├úo Logar├¡tmica)
+	// Com 816 notas, queremos um valor que fa├ºa sentido visual.
 	densityValue := 0.05 // Base 5%
 	if count > 0 {
-		// Quanto mais notas, mais o cérebro se torna denso (Log10)
+		// Quanto mais notas, mais o c├®rebro se torna denso (Log10)
 		// Ex: Log10(816) ~ 2.9. 2.9 * 0.15 = 0.43 + 0.05 = 48%
-		densityValue += (float64(count) / 1000.0) * 0.2 // Linear suave até 1000 notas
+		densityValue += (float64(count) / 1000.0) * 0.2 // Linear suave at├® 1000 notas
 	}
 	if densityValue > 1.0 { densityValue = 1.0 }
 
@@ -1052,10 +1052,10 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 		"active_nodes": count,
 	}
 
-	// 🧠 Dispara cálculos pesados do Cérebro Relacional de forma assíncrona ou síncrona dependendo da escala
+	// ­ƒºá Dispara c├ílculos pesados do C├®rebro Relacional de forma ass├¡ncrona ou s├¡ncrona dependendo da escala
 	if a.GEngine != nil {
 		a.GEngine.ComputePageRank()    // Centralidade de Autoridade
-		a.GEngine.ComputeCommunities() // Afinidade Semântica
+		a.GEngine.ComputeCommunities() // Afinidade Sem├óntica
 		a.GEngine.ComputeBetweenness() // Notas Ponte (Gargalos)
 		a.GEngine.ComputeHITS()        // Hubs vs Authorities
 		
@@ -1064,7 +1064,7 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 		stats["communities"] = countCommunities(a.GEngine)
 	}
 
-	// Gatilho: Se o usuário pediu saúde, aproveitamos para tecer pontes neurais
+	// Gatilho: Se o usu├írio pediu sa├║de, aproveitamos para tecer pontes neurais
 	// Aumentamos o lote de processamento conforme o tamanho do cofre
 	batchSize := 100
 	if count > 500 { batchSize = 250 }
@@ -1073,11 +1073,11 @@ func (a *App) AnalyzeGraphHealth() (map[string]interface{}, error) {
 	return stats, nil
 }
 
-// WeaveNeuralLinks percorre o grafo e cria conexões por similaridade (brain mapping).
+// WeaveNeuralLinks percorre o grafo e cria conex├Áes por similaridade (brain mapping).
 func (a *App) WeaveNeuralLinks(limit int) {
 	fmt.Printf("[Neural] Tecendo pontes em lote de %d notas...\n", limit)
 	
-	// 1. Busca as notas (as 50 mais recentes + uma amostra aleatória se possível)
+	// 1. Busca as notas (as 50 mais recentes + uma amostra aleat├│ria se poss├¡vel)
 	notes, err := a.qdrant.Search("obsidian_knowledge", nil, limit)
 	if err != nil || len(notes) == 0 {
 		return
@@ -1090,13 +1090,13 @@ func (a *App) WeaveNeuralLinks(limit int) {
 			continue
 		}
 
-		// 2. Usamos o embedding para encontrar vizinhos próximos
+		// 2. Usamos o embedding para encontrar vizinhos pr├│ximos
 		vector, err := a.embedder.GenerateEmbedding(a.ctx, content)
 		if err != nil {
 			continue
 		}
 
-		// 3. Busca os 5 vizinhos mais próximos (aumentado de 3 para 5)
+		// 3. Busca os 5 vizinhos mais pr├│ximos (aumentado de 3 para 5)
 		similars, err := a.qdrant.SearchWithScores("obsidian_knowledge", vector, 6) 
 		if err != nil {
 			continue
@@ -1115,15 +1115,15 @@ func (a *App) WeaveNeuralLinks(limit int) {
 			runtime.EventsEmit(a.ctx, "graph:edge", map[string]interface{}{
 				"source": strings.ToLower(name),
 				"target": strings.ToLower(targetName),
-				"weight": int(score * 6), // Reforço visual
+				"weight": int(score * 6), // Refor├ºo visual
 				"type":   "neural",
 			})
 		}
 	}
-	fmt.Println("[Neural] ✅ Tecelagem concluída para o lote.")
+	fmt.Println("[Neural] Ô£à Tecelagem conclu├¡da para o lote.")
 }
 
-// OpenFileInEditor abre o arquivo fonte usando o handler padrão do SO.
+// OpenFileInEditor abre o arquivo fonte usando o handler padr├úo do SO.
 func (a *App) OpenFileInEditor(path string) error {
 	fmt.Printf("[App] Abrindo arquivo na fonte: %s\n", path)
 	// No Windows usamos 'cmd /c start'
@@ -1131,7 +1131,7 @@ func (a *App) OpenFileInEditor(path string) error {
 	return cmd.Run()
 }
 
-// SendTerminalData envia input do usuário para o processo do terminal (stdin).
+// SendTerminalData envia input do usu├írio para o processo do terminal (stdin).
 func (a *App) SendTerminalData(agent string, data string) {
 	sessionID := "acp-session-" + agent
 	a.executor.SendInput(sessionID, data, nil)
@@ -1141,12 +1141,12 @@ func (a *App) ResizeTerminal(agent string, cols int, rows int) {
 	// Ignored on JSON RPC mode.
 }
 
-// StopAgentSession encerra a sessão ativa.
+// StopAgentSession encerra a sess├úo ativa.
 func (a *App) StopAgentSession(agent string) error {
 	sessionID := "acp-session-" + agent
 	err := a.executor.StopSession(sessionID)
 	if err != nil {
-		return fmt.Errorf("nenhuma sessão ativa ACP encontrada para %s", agent)
+		return fmt.Errorf("nenhuma sess├úo ativa ACP encontrada para %s", agent)
 	}
 
 	runtime.EventsEmit(a.ctx, "terminal:closed", agent)
@@ -1154,50 +1154,50 @@ func (a *App) StopAgentSession(agent string) error {
 }
 
 // ============================================================
-// NOVAS INTEGRAÇÕES (Autonomia, Regras e MCP)
+// NOVAS INTEGRA├ç├òES (Autonomia, Regras e MCP)
 // ============================================================
 
 // SetAutonomousMode ativa ou desativa globalmente o modo YOLO
 func (a *App) SetAutonomousMode(enabled bool) string {
 	a.executor.AutonomousMode = enabled
 	if enabled {
-		return "Modo Autônomo ATIVADO. Executará tarefas de terminal sem permissão (Comandos destrutivos ainda requerem review de Hands Security)."
+		return "Modo Aut├┤nomo ATIVADO. Executar├í tarefas de terminal sem permiss├úo (Comandos destrutivos ainda requerem review de Hands Security)."
 	}
-	return "Modo Autônomo DESATIVADO. A CLI voltará a pedir aprovação."
+	return "Modo Aut├┤nomo DESATIVADO. A CLI voltar├í a pedir aprova├º├úo."
 }
 
-// SubmitReview aprova ou rejeita uma ação pendente da IA
+// SubmitReview aprova ou rejeita uma a├º├úo pendente da IA
 func (a *App) SubmitReview(id string, approved bool) {
 	a.executor.SubmitReview(id, approved)
 }
 
-// GenerateGeminiMD cria um arquivo base GEMINI.md no diretório atual
+// GenerateGeminiMD cria um arquivo base GEMINI.md no diret├│rio atual
 func (a *App) GenerateGeminiMD() string {
 	content := `# Project Instructions
 
-Você agora está sendo orquestrado pelo Lumaestro (Modo ACP).
+Voc├¬ agora est├í sendo orquestrado pelo Lumaestro (Modo ACP).
 
-- **Manejo de Arquivos**: O Backend ditará suas permissões. Se receber "Acesso Negado", pergunte ao usuário.
-- **Autonomia Limitada**: Só prossiga ativamente se a sessão permitir.
+- **Manejo de Arquivos**: O Backend ditar├í suas permiss├Áes. Se receber "Acesso Negado", pergunte ao usu├írio.
+- **Autonomia Limitada**: S├│ prossiga ativamente se a sess├úo permitir.
 
 `
 	err := os.WriteFile("GEMINI.md", []byte(content), 0644)
 	if err != nil {
 		return "Erro ao gerar arquivo de contexto: " + err.Error()
 	}
-	return "Contexto GEMINI.md gerado com sucesso no diretório atual!"
+	return "Contexto GEMINI.md gerado com sucesso no diret├│rio atual!"
 }
 
-// 🧠 NEURAL BINDINGS: Métodos que expõem o aprendizado ativo para a UI
+// ­ƒºá NEURAL BINDINGS: M├®todos que exp├Áem o aprendizado ativo para a UI
 
-// HandleNodeClick recebe o feedback positivo (clique) e aplica reforço sináptico.
+// HandleNodeClick recebe o feedback positivo (clique) e aplica refor├ºo sin├íptico.
 func (a *App) HandleNodeClick(nodeID string) {
 	if a.ranker != nil {
 		a.ranker.Reinforce(nodeID)
 
 		runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 			"source":  "NEURAL",
-			"content": fmt.Sprintf("🧠 Reforço sináptico aplicado ao nó: %s", nodeID),
+			"content": fmt.Sprintf("­ƒºá Refor├ºo sin├íptico aplicado ao n├│: %s", nodeID),
 		})
 	}
 }
@@ -1207,14 +1207,14 @@ func (a *App) SetExplorationMode(enabled bool) string {
 	if a.ranker != nil {
 		a.ranker.SetExplorationMode(enabled)
 		if enabled {
-			return "Modo Exploração Ativado (Pesos neurais ignorados)."
+			return "Modo Explora├º├úo Ativado (Pesos neurais ignorados)."
 		}
 		return "Modo Neural Ativado (Pesos aprendidos influenciam o grafo)."
 	}
-	return "Motor neural não inicializado."
+	return "Motor neural n├úo inicializado."
 }
 
-// IsExplorationMode retorna o estado atual para sincronização da UI.
+// IsExplorationMode retorna o estado atual para sincroniza├º├úo da UI.
 func (a *App) IsExplorationMode() bool {
 	if a.ranker != nil {
 		return a.ranker.IsExplorationMode()
@@ -1244,7 +1244,7 @@ func (a *App) ListMCPServers() string {
 	return string(output)
 }
 
-// AddGeminiAccount adiciona uma nova conta e prepara seu diretório de sessão
+// AddGeminiAccount adiciona uma nova conta e prepara seu diret├│rio de sess├úo
 func (a *App) AddGeminiAccount(name string) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -1254,12 +1254,12 @@ func (a *App) AddGeminiAccount(name string) error {
 	cwd, _ := os.Getwd()
 	accountPath := filepath.Join(cwd, ".gemini_accounts", name)
 
-	// Cria o diretório de sessão se não existir
+	// Cria o diret├│rio de sess├úo se n├úo existir
 	if err := os.MkdirAll(accountPath, 0755); err != nil {
 		return fmt.Errorf("falha ao criar pasta de conta: %w", err)
 	}
 
-	// Verifica se já existe na config
+	// Verifica se j├í existe na config
 	for i := range cfg.GeminiAccounts {
 		if cfg.GeminiAccounts[i].Name == name {
 			cfg.GeminiAccounts[i].HomeDir = accountPath
@@ -1276,7 +1276,7 @@ func (a *App) AddGeminiAccount(name string) error {
 	return config.Save(*cfg)
 }
 
-// LoginGeminiAccount abre um terminal para realizar o login OAuth em uma conta específica
+// LoginGeminiAccount abre um terminal para realizar o login OAuth em uma conta espec├¡fica
 func (a *App) LoginGeminiAccount(name string) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -1292,7 +1292,7 @@ func (a *App) LoginGeminiAccount(name string) error {
 	}
 
 	if targetDir == "" {
-		return fmt.Errorf("conta '%s' não encontrada ou sem diretório configurado", name)
+		return fmt.Errorf("conta '%s' n├úo encontrada ou sem diret├│rio configurado", name)
 	}
 
 	// Comando para abrir o terminal com GEMINI_CLI_HOME isolado
@@ -1302,14 +1302,14 @@ func (a *App) LoginGeminiAccount(name string) error {
 		binaryPath = filepath.Join(cwd, "node_modules", ".bin", "gemini.cmd")
 	}
 
-	// Script para o PowerShell forçar o ambiente de sessão desta conta
+	// Script para o PowerShell for├ºar o ambiente de sess├úo desta conta
 	script := fmt.Sprintf(`$env:GEMINI_CLI_HOME='%s'; $env:NO_BROWSER='true'; & '%s' login`, targetDir, binaryPath)
 
-	fmt.Printf("[Maestro] 🔑 Iniciando fluxo de Login OAuth para: %s\n", name)
+	fmt.Printf("[Maestro] ­ƒöæ Iniciando fluxo de Login OAuth para: %s\n", name)
 	return exec.Command("cmd", "/c", "start", "powershell", "-NoExit", "-Command", script).Run()
 }
 
-// SwitchGeminiAccount alterna a conta ativa do Gemini e reinicia a sessão
+// SwitchGeminiAccount alterna a conta ativa do Gemini e reinicia a sess├úo
 func (a *App) SwitchGeminiAccount(name string) error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -1327,18 +1327,18 @@ func (a *App) SwitchGeminiAccount(name string) error {
 	}
 
 	if !found {
-		return fmt.Errorf("conta '%s' não encontrada", name)
+		return fmt.Errorf("conta '%s' n├úo encontrada", name)
 	}
 
 	if err := config.Save(*cfg); err != nil {
 		return err
 	}
 
-	fmt.Printf("[Maestro] 🔄 Trocando para sessão de login: %s\n", name)
+	fmt.Printf("[Maestro] ­ƒöä Trocando para sess├úo de login: %s\n", name)
 	return a.StartAgentSession("gemini")
 }
 
-// 🛡️ checkRogueMainFiles escaneia subpastas procurando arquivos .go com "package main"
+// ­ƒøí´©Å checkRogueMainFiles escaneia subpastas procurando arquivos .go com "package main"
 // que causariam conflito silencioso durante o build do Wails (go build ./...).
 // Se encontrar, emite um AVISO GIGANTE no terminal para o desenvolvedor.
 func checkRogueMainFiles() {
@@ -1348,16 +1348,16 @@ func checkRogueMainFiles() {
 		if err != nil {
 			return nil
 		}
-		// Ignora a raiz (main.go e app.go são legítimos), build/ e frontend/
+		// Ignora a raiz (main.go e app.go s├úo leg├¡timos), build/ e frontend/
 		dir := filepath.Dir(path)
 		if dir == "." || strings.HasPrefix(path, "build") || strings.HasPrefix(path, "frontend") {
 			return nil
 		}
-		// Só arquivos .go
+		// S├│ arquivos .go
 		if info.IsDir() || filepath.Ext(path) != ".go" {
 			return nil
 		}
-		// Lê as primeiras linhas para checar "package main"
+		// L├¬ as primeiras linhas para checar "package main"
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return nil
@@ -1374,24 +1374,24 @@ func checkRogueMainFiles() {
 
 	if len(rogueFiles) > 0 {
 		fmt.Println("")
-		fmt.Println("╔══════════════════════════════════════════════════════════════╗")
-		fmt.Println("║  ⚠️  ALERTA: ARQUIVOS GO CONFLITANTES DETECTADOS!           ║")
-		fmt.Println("║                                                              ║")
-		fmt.Println("║  Os seguintes arquivos contêm 'package main' em subpastas:   ║")
-		fmt.Println("║  Isso QUEBRA o 'wails dev' silenciosamente!                  ║")
-		fmt.Println("╠══════════════════════════════════════════════════════════════╣")
+		fmt.Println("ÔòöÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòù")
+		fmt.Println("Ôòæ  ÔÜá´©Å  ALERTA: ARQUIVOS GO CONFLITANTES DETECTADOS!           Ôòæ")
+		fmt.Println("Ôòæ                                                              Ôòæ")
+		fmt.Println("Ôòæ  Os seguintes arquivos cont├¬m 'package main' em subpastas:   Ôòæ")
+		fmt.Println("Ôòæ  Isso QUEBRA o 'wails dev' silenciosamente!                  Ôòæ")
+		fmt.Println("ÔòáÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòú")
 		for _, f := range rogueFiles {
-			fmt.Printf("║  🔴 %s\n", f)
+			fmt.Printf("Ôòæ  ­ƒö┤ %s\n", f)
 		}
-		fmt.Println("╠══════════════════════════════════════════════════════════════╣")
-		fmt.Println("║  SOLUÇÃO: Delete ou mova esses arquivos para fora do projeto ║")
-		fmt.Println("╚══════════════════════════════════════════════════════════════╝")
+		fmt.Println("ÔòáÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòú")
+		fmt.Println("Ôòæ  SOLU├ç├âO: Delete ou mova esses arquivos para fora do projeto Ôòæ")
+		fmt.Println("ÔòÜÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòØ")
 		fmt.Println("")
 	}
 }
 
 // ============================================================
-// ORQUESTRAÇÃO SWARM (PAPERCLIP MODE)
+// ORQUESTRA├ç├âO SWARM (PAPERCLIP MODE)
 // ============================================================
 
 func (a *App) startOrchestration() {
@@ -1401,7 +1401,7 @@ func (a *App) startOrchestration() {
 func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 	sessionID := "acp-session-" + agent.ID.String()
 
-	// 1. Buscar Ocupação Atual ou Nova Tarefa
+	// 1. Buscar Ocupa├º├úo Atual ou Nova Tarefa
 	var issue db.Issue
 	err := db.InstanceDB.Where("assignee_agent_id = ? AND status = ?", agent.ID, "in_progress").First(&issue).Error
 	
@@ -1410,7 +1410,7 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 		// Tenta buscar algo novo na fila (TODO)
 		err = db.InstanceDB.Where("status = ? AND (assignee_agent_id IS NULL OR assignee_agent_id = ?)", "todo", agent.ID).First(&issue).Error
 		if err == nil {
-			// Realiza Checkout Atômico
+			// Realiza Checkout At├┤mico
 			lockedIssue, lockedErr := orchestration.CheckoutIssue(agent.ID, issue.ID)
 			if lockedErr != nil {
 				orchestration.FinalizeHeartbeat(agent.ID, runID, true, "Conflito de checkout na fila.")
@@ -1425,7 +1425,7 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 		}
 	}
 
-	// 2. Iniciar ou Reutilizar Sessão ACP vinculada à Identidade
+	// 2. Iniciar ou Reutilizar Sess├úo ACP vinculada ├á Identidade
 	err = a.executor.StartSession(a.ctx, "gemini", sessionID, "LATEST", agent.ID, &issue.ID)
 	if err != nil {
 		orchestration.FinalizeHeartbeat(agent.ID, runID, false, "Erro ACP Swarm: "+err.Error())
@@ -1436,7 +1436,7 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 	timeline, _ := orchestration.GetTimelineByIssue(issue.ID)
 	historyStr := ""
 	for i, c := range timeline {
-		if i > 5 { break } // Apenas os últimos 5 para economia de tokens
+		if i > 5 { break } // Apenas os ├║ltimos 5 para economia de tokens
 		author := "Sistema"
 		if c.AuthorAgentID != nil { author = "Agente" }
 		historyStr += fmt.Sprintf("- %s: %s\n", author, c.Body)
@@ -1444,13 +1444,13 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 
 	prompt := ""
 	if isNewTask {
-		prompt = fmt.Sprintf("Você é o agente corporativo %s (Cargo: %s). Você acaba de assumir a tarefa: %s\nDescrição: %s\nInicie o trabalho imediatamente. Use as ferramentas de 'Lumaestro/' para Handoff ou Conclusão se necessário.", agent.Name, agent.Role, issue.Title, issue.Description)
+		prompt = fmt.Sprintf("Voc├¬ ├® o agente corporativo %s (Cargo: %s). Voc├¬ acaba de assumir a tarefa: %s\nDescri├º├úo: %s\nInicie o trabalho imediatamente. Use as ferramentas de 'Lumaestro/' para Handoff ou Conclus├úo se necess├írio.", agent.Name, agent.Role, issue.Title, issue.Description)
 	} else {
-		prompt = fmt.Sprintf("Você é o agente corporativo %s (Cargo: %s). Continuando tarefa: %s\nHistórico recente:\n%s\nPor favor, prossiga com os próximos passos.", agent.Name, agent.Role, issue.Title, historyStr)
+		prompt = fmt.Sprintf("Voc├¬ ├® o agente corporativo %s (Cargo: %s). Continuando tarefa: %s\nHist├│rico recente:\n%s\nPor favor, prossiga com os pr├│ximos passos.", agent.Name, agent.Role, issue.Title, historyStr)
 	}
 
-	// 3. Injetar Pulso de Inteligência no Agente Concorrente
-	// O SendInput é assíncrono e lidará com o fluxo JSON-RPC
+	// 3. Injetar Pulso de Intelig├¬ncia no Agente Concorrente
+	// O SendInput ├® ass├¡ncrono e lidar├í com o fluxo JSON-RPC
 	err = a.executor.SendInput(sessionID, prompt, nil)
 	if err != nil {
 		orchestration.FinalizeHeartbeat(agent.ID, runID, false, "Erro ao injetar comando: "+err.Error())
@@ -1461,7 +1461,7 @@ func (a *App) handleAgentWakeUp(agent db.Agent, runID uuid.UUID) {
 	orchestration.FinalizeHeartbeat(agent.ID, runID, true, "Agente acordado e processando tarefa.")
 }
 
-// Bindings para interação do Front-End (Wails)
+// Bindings para intera├º├úo do Front-End (Wails)
 
 // CreateAgent 'contrata' um novo agente no banco de dados corporativo local
 func (a *App) CreateAgent(name, role string, listSkills string, budget int) string {
@@ -1478,7 +1478,7 @@ func (a *App) CreateAgent(name, role string, listSkills string, budget int) stri
 	return "Agente " + name + " contratado e aguardando pulso de vida!"
 }
 
-// CreateTask adiciona uma nova tarefa atômica na fila da empresa
+// CreateTask adiciona uma nova tarefa at├┤mica na fila da empresa
 func (a *App) CreateTask(title, description, priority string) string {
 	issue := db.Issue{
 		Title:       title,
@@ -1489,7 +1489,7 @@ func (a *App) CreateTask(title, description, priority string) string {
 	if err := db.InstanceDB.Create(&issue).Error; err != nil {
 		return "Erro ao criar tarefa: " + err.Error()
 	}
-	return "Tarefa '" + title + "' injetada na fila de orquestração."
+	return "Tarefa '" + title + "' injetada na fila de orquestra├º├úo."
 }
 
 // GetAgents retorna a lista de todos os agentes contratados
@@ -1507,9 +1507,9 @@ func (a *App) GetIssues() []db.Issue {
 	return issues
 }
 
-// --- GOVERNANÇA V2 (METAS, TIMELINE E APROVAÇÕES) ---
+// --- GOVERNAN├çA V2 (METAS, TIMELINE E APROVA├ç├òES) ---
 
-// CreateGoal cria um novo objetivo estratégico para nortear o enxame
+// CreateGoal cria um novo objetivo estrat├®gico para nortear o enxame
 func (a *App) CreateGoal(title, description, level, parentIDStr, ownerIDStr string) string {
 	var parentID *uuid.UUID
 	if parentIDStr != "" {
@@ -1532,10 +1532,10 @@ func (a *App) CreateGoal(title, description, level, parentIDStr, ownerIDStr stri
 	if err := db.InstanceDB.Create(&goal).Error; err != nil {
 		return "Erro ao criar meta: " + err.Error()
 	}
-	return "Meta '" + title + "' estabelecida no plano estratégico!"
+	return "Meta '" + title + "' estabelecida no plano estrat├®gico!"
 }
 
-// GetGoals lista a árvore de objetivos da empresa
+// GetGoals lista a ├írvore de objetivos da empresa
 func (a *App) GetGoals() []db.Goal {
 	var goals []db.Goal
 	db.InstanceDB.Find(&goals)
@@ -1545,7 +1545,7 @@ func (a *App) GetGoals() []db.Goal {
 // AddComment insere uma nota na linha do tempo de uma tarefa (Audit Chain)
 func (a *App) AddComment(issueIDStr, body string) string {
 	issueID, _ := uuid.Parse(issueIDStr)
-	// Comentário manual via UI usa Actor System (uuid.Nil)
+	// Coment├írio manual via UI usa Actor System (uuid.Nil)
 	err := orchestration.AddIssueComment(uuid.Nil, issueID, body)
 	if err != nil {
 		return "Erro: " + err.Error()
@@ -1553,34 +1553,34 @@ func (a *App) AddComment(issueIDStr, body string) string {
 	return "Nota registrada na tarefa."
 }
 
-// GetIssueTimeline recupera a história completa de uma tarefa
+// GetIssueTimeline recupera a hist├│ria completa de uma tarefa
 func (a *App) GetIssueTimeline(issueIDStr string) []db.IssueComment {
 	issueID, _ := uuid.Parse(issueIDStr)
 	comments, _ := orchestration.GetTimelineByIssue(issueID)
 	return comments
 }
 
-// ApproveAction libera um Portão de Aprovação (Board Decision)
+// ApproveAction libera um Port├úo de Aprova├º├úo (Board Decision)
 func (a *App) ApproveAction(approvalIDStr, note string) string {
 	id, _ := uuid.Parse(approvalIDStr)
 	err := orchestration.ProcessApproval(id, true, note)
 	if err != nil {
 		return "Erro: " + err.Error()
 	}
-	return "Ação aprovada e registrada na auditoria."
+	return "A├º├úo aprovada e registrada na auditoria."
 }
 
-// RejectAction bloqueia permanentemente uma intenção da IA
+// RejectAction bloqueia permanentemente uma inten├º├úo da IA
 func (a *App) RejectAction(approvalIDStr, note string) string {
 	id, _ := uuid.Parse(approvalIDStr)
 	err := orchestration.ProcessApproval(id, false, note)
 	if err != nil {
 		return "Erro: " + err.Error()
 	}
-	return "Ação rejeitada. O agente permanecerá em pausa para reavaliação."
+	return "A├º├úo rejeitada. O agente permanecer├í em pausa para reavalia├º├úo."
 }
 
-// --- SUITE EXECUTIVA (KPIs E DOCUMENTAÇÃO RAG) ---
+// --- SUITE EXECUTIVA (KPIs E DOCUMENTA├ç├âO RAG) ---
 
 // GetExecutiveSummary retorna os KPIs do Enxame para o Dashboard de Comando
 func (a *App) GetExecutiveSummary() orchestration.ExecSummary {
@@ -1596,17 +1596,17 @@ func (a *App) GetDocuments(issueIDStr string) []db.Document {
 	return docs
 }
 
-// UpsertDocument sincroniza um documento (PRD, Spec, Relatório) com o banco e o RAG
+// UpsertDocument sincroniza um documento (PRD, Spec, Relat├│rio) com o banco e o RAG
 func (a *App) UpsertDocument(issueIDStr, title, body, change string) string {
 	issueID, _ := uuid.Parse(issueIDStr)
-	// Operação manual via UI usa Actor System (uuid.Nil)
+	// Opera├º├úo manual via UI usa Actor System (uuid.Nil)
 	_, err := orchestration.UpsertDocument(uuid.Nil, issueID, title, body, change)
 	if err != nil {
 		return "Erro: " + err.Error()
 	}
 	return "Documento '" + title + "' guardado e indexado para o RAG."
 }
-// --- GESTÃO DE SEGREDOS (AGENT VAULT) ---
+// --- GEST├âO DE SEGREDOS (AGENT VAULT) ---
 
 // GetAgentSecrets retorna as chaves de API cadastradas para um agente
 func (a *App) GetAgentSecrets(agentIDStr string) []db.AgentSecret {
@@ -1632,16 +1632,16 @@ func (a *App) UpdateAgentSecret(agentIDStr, key, value string) string {
 	return "Segredo '" + key + "' atualizado para o agente."
 }
 
-// GetPendingApprovals retorna todas as solicitações de aprovação que aguardam decisão humana.
+// GetPendingApprovals retorna todas as solicita├º├Áes de aprova├º├úo que aguardam decis├úo humana.
 func (a *App) GetPendingApprovals() []db.Approval {
 	var approvals []db.Approval
 	db.InstanceDB.Where("status = ?", "pending").Order("created_at DESC").Find(&approvals)
 	return approvals
 }
 
-// --- ⚡ MÓDULO LIGHTNING (DASHBOARD ANALÍTICO) ---
+// --- ÔÜí M├ôDULO LIGHTNING (DASHBOARD ANAL├ìTICO) ---
 
-// GetLightningStats retorna estatísticas calculadas pelo DuckDB para o Dashboard.
+// GetLightningStats retorna estat├¡sticas calculadas pelo DuckDB para o Dashboard.
 func (a *App) GetLightningStats() map[string]interface{} {
 	stats := make(map[string]interface{})
 	if a.LStore == nil {
@@ -1653,12 +1653,12 @@ func (a *App) GetLightningStats() map[string]interface{} {
 	a.LStore.GetDB().QueryRow("SELECT count(*) FROM rollouts").Scan(&totalRollouts)
 	stats["total_rollouts"] = totalRollouts
 
-	// 2. Média de Recompensa
+	// 2. M├®dia de Recompensa
 	var avgReward float64
 	a.LStore.GetDB().QueryRow("SELECT avg(reward) FROM rewards").Scan(&avgReward)
 	stats["avg_reward"] = avgReward
 
-	// 💰 3. Métricas Financeiras (Tokens e Custo Estimado)
+	// ­ƒÆ░ 3. M├®tricas Financeiras (Tokens e Custo Estimado)
 	var pTokens, cTokens int64
 	a.LStore.GetDB().QueryRow("SELECT sum(prompt_tokens), sum(completion_tokens) FROM spans").Scan(&pTokens, &cTokens)
 	stats["prompt_tokens"] = pTokens
@@ -1674,19 +1674,19 @@ func (a *App) GetLightningStats() map[string]interface{} {
 	return stats
 }
 
-// TriggerReflection destila o conhecimento de um rollout específico no Obsidian.
+// TriggerReflection destila o conhecimento de um rollout espec├¡fico no Obsidian.
 func (a *App) TriggerReflection(rolloutID string) string {
 	if a.LReflector == nil {
-		return "Erro: Motor de Reflexão não inicializado."
+		return "Erro: Motor de Reflex├úo n├úo inicializado."
 	}
 	err := a.LReflector.DistillLesson(rolloutID)
 	if err != nil {
-		return "Erro na reflexão: " + err.Error()
+		return "Erro na reflex├úo: " + err.Error()
 	}
-	return "Sucesso: Lição destilada no Obsidian Vault!"
+	return "Sucesso: Li├º├úo destilada no Obsidian Vault!"
 }
 
-// startAPOWorker monitora o desempenho do enxame e sugere otimizações (APO).
+// startAPOWorker monitora o desempenho do enxame e sugere otimiza├º├Áes (APO).
 func (a *App) startAPOWorker() {
 	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
@@ -1698,7 +1698,7 @@ func (a *App) startAPOWorker() {
 		case <-ticker.C:
 			if a.LStore == nil || a.LOptimizer == nil { continue }
 
-			// 1. Identificar agentes com "Dopamina Crítica" (Média < -0.2 nos últimos rollouts)
+			// 1. Identificar agentes com "Dopamina Cr├¡tica" (M├®dia < -0.2 nos ├║ltimos rollouts)
 			var agentIDStr string
 			var avgReward float64
 			err := a.LStore.GetDB().QueryRow(`
@@ -1711,24 +1711,24 @@ func (a *App) startAPOWorker() {
 			`).Scan(&agentIDStr, &avgReward)
 
 			if err == nil && agentIDStr != "" {
-				fmt.Printf("[🧠 APO Cortex] Desempenho crítico para %s (RR: %.2f). Iniciando Evolução...\n", agentIDStr, avgReward)
+				fmt.Printf("[­ƒºá APO Cortex] Desempenho cr├¡tico para %s (RR: %.2f). Iniciando Evolu├º├úo...\n", agentIDStr, avgReward)
 				
 				// 2. Obter o prompt atual (do config ou do DB)
-				currentPrompt := "Você é o Maestro, um assistente técnico de elite."
+				currentPrompt := "Voc├¬ ├® o Maestro, um assistente t├®cnico de elite."
 				if latest, err := a.LStore.GetLatestPrompt(agentIDStr); err == nil && latest != "" {
 					currentPrompt = latest
 				}
 
-				// 3. Gerar a Crítica APO
+				// 3. Gerar a Cr├¡tica APO
 				criticInput, failures, err := a.LOptimizer.RefinePrompt(a.ctx, agentIDStr, currentPrompt)
-				if err != nil || failures == "Nenhuma falha crítica detectada." { continue }
+				if err != nil || failures == "Nenhuma falha cr├¡tica detectada." { continue }
 
-				// 4. Chamar o LLM para gerar o FEIXE de 3 candidatos (Com Resiliência Automática)
-				fmt.Println("[🧠 APO Beam] Gerando 3 variantes de evolução estratégica com Escudo de Resiliência...")
+				// 4. Chamar o LLM para gerar o FEIXE de 3 candidatos (Com Resili├¬ncia Autom├ítica)
+				fmt.Println("[­ƒºá APO Beam] Gerando 3 variantes de evolu├º├úo estrat├®gica com Escudo de Resili├¬ncia...")
 				beamOutput, provider, err := a.LRouter.ExecuteWithFallback(a.ctx, "", criticInput)
 				if err == nil && beamOutput != "" {
-					fmt.Printf("[🧪 RESILIÊNCIA] Variantes geradas via: %s\n", provider)
-					// 5. Novo: Loop de Regressão Gold
+					fmt.Printf("[­ƒº¬ RESILI├èNCIA] Variantes geradas via: %s\n", provider)
+					// 5. Novo: Loop de Regress├úo Gold
 					goldSamples, _ := a.LStore.GetGoldSamples(agentIDStr)
 					
 					re := regexp.MustCompile(`(?s)<variant name="([^"]+)">\s*<critique>(.*?)</critique>\s*<prompt>(.*?)</prompt>\s*</variant>`)
@@ -1737,13 +1737,13 @@ func (a *App) startAPOWorker() {
 					for _, m := range matches {
 						name, critique, content := m[1], m[2], m[3]
 						
-						// Calcular Acurácia contra os "Gold Samples"
+						// Calcular Acur├ícia contra os "Gold Samples"
 						accuracy := 100.0
 						if len(goldSamples) > 0 {
 							hits := 0
 							for _, gs := range goldSamples {
 								// Executa o novo prompt contra o input de ouro (Com Fallback)
-								fmt.Printf("[🧪 TEST] Validando variante '%s' contra Caso de Ouro (Manto Ativo)...\n", name)
+								fmt.Printf("[­ƒº¬ TEST] Validando variante '%s' contra Caso de Ouro (Manto Ativo)...\n", name)
 								testOutput, _, err := a.LRouter.ExecuteWithFallback(a.ctx, content, gs["input"])
 								if err == nil && strings.Contains(strings.ToLower(testOutput), strings.ToLower(gs["output"])) {
 									hits++
@@ -1756,7 +1756,7 @@ func (a *App) startAPOWorker() {
 					}
 
 					if len(matches) > 0 {
-						fmt.Printf("[✨ BEAM SUCCESS] %d candidatos validados (Gold Check) para %s!\n", len(matches), agentIDStr)
+						fmt.Printf("[Ô£¿ BEAM SUCCESS] %d candidatos validados (Gold Check) para %s!\n", len(matches), agentIDStr)
 						runtime.EventsEmit(a.ctx, "lightning:beam_ready", agentIDStr)
 					}
 				}
@@ -1765,7 +1765,7 @@ func (a *App) startAPOWorker() {
 	}
 }
 
-// GetLatestSpans retorna os últimos traces analíticos do DuckDB para o Dashboard.
+// GetLatestSpans retorna os ├║ltimos traces anal├¡ticos do DuckDB para o Dashboard.
 func (a *App) GetLatestSpans() []map[string]interface{} {
 	if a.LStore == nil { return []map[string]interface{}{} }
 	
@@ -1804,14 +1804,14 @@ func (a *App) GetLatestSpans() []map[string]interface{} {
 
 // ExportTelemetry exporta os traces do DuckDB para um arquivo JSON estruturado.
 func (a *App) ExportTelemetry() string {
-	if a.LStore == nil { return "⚠️ Motor analítico offline." }
+	if a.LStore == nil { return "ÔÜá´©Å Motor anal├¡tico offline." }
 	path := "lumaestro_telemetry_export.json"
 	err := lightning.ExportSpansToJSON(a.LStore, path)
-	if err != nil { return "🔴 Erro na exportação: " + err.Error() }
-	return "✅ Telemetria de Elite exportada para: " + path
+	if err != nil { return "­ƒö┤ Erro na exporta├º├úo: " + err.Error() }
+	return "Ô£à Telemetria de Elite exportada para: " + path
 }
 
-// GetPromptHistory retorna o histórico de evolução de prompts de um agente.
+// GetPromptHistory retorna o hist├│rico de evolu├º├úo de prompts de um agente.
 func (a *App) GetPromptHistory(agentName string) []map[string]interface{} {
 	if a.LStore == nil { return nil }
 	rows, err := a.LStore.GetDB().Query(`
@@ -1838,7 +1838,7 @@ func (a *App) GetPromptHistory(agentName string) []map[string]interface{} {
 	return history
 }
 
-// GetPromptCandidates retorna os candidatos aguardando aprovação.
+// GetPromptCandidates retorna os candidatos aguardando aprova├º├úo.
 func (a *App) GetPromptCandidates() []map[string]interface{} {
 	if a.LStore == nil { return nil }
 	cands, _ := a.LStore.GetPendingCandidates()
@@ -1847,27 +1847,27 @@ func (a *App) GetPromptCandidates() []map[string]interface{} {
 
 // ApprovePromptVariant aprova um candidato e o torna o prompt oficial.
 func (a *App) ApprovePromptVariant(candidateID string) string {
-	if a.LStore == nil { return "🔴 Motor analítico offline." }
+	if a.LStore == nil { return "­ƒö┤ Motor anal├¡tico offline." }
 	err := a.LStore.ApproveCandidate(candidateID)
-	if err != nil { return "🔴 Erro na aprovação: " + err.Error() }
-	return "✅ Variante aprovada com sucesso! Evolução concluída."
+	if err != nil { return "­ƒö┤ Erro na aprova├º├úo: " + err.Error() }
+	return "Ô£à Variante aprovada com sucesso! Evolu├º├úo conclu├¡da."
 }
 
-// AddGoldSample registra manualmente uma interação perfeita como referência de regressão.
+// AddGoldSample registra manualmente uma intera├º├úo perfeita como refer├¬ncia de regress├úo.
 func (a *App) AddGoldSample(agentName, input, output string) string {
-	if a.LStore == nil { return "🔴 Motor analítico offline." }
+	if a.LStore == nil { return "­ƒö┤ Motor anal├¡tico offline." }
 	err := a.LStore.InsertGoldSample(agentName, input, output)
-	if err != nil { return "🔴 Erro ao salvar: " + err.Error() }
-	return "💎 Caso de Ouro registrado! O enxame usará isso para validar futuras evoluções."
+	if err != nil { return "­ƒö┤ Erro ao salvar: " + err.Error() }
+	return "­ƒÆÄ Caso de Ouro registrado! O enxame usar├í isso para validar futuras evolu├º├Áes."
 }
 
 // ExportRLHFDataset gera um arquivo JSONL com conversas perfeitas para Fine-tuning.
 func (a *App) ExportRLHFDataset() string {
-	if a.LStore == nil { return "⚠️ Motor analítico offline." }
+	if a.LStore == nil { return "ÔÜá´©Å Motor anal├¡tico offline." }
 	path := "dataset_lumaestro_rlhf.jsonl"
 	
 	file, err := os.Create(path)
-	if err != nil { return "🔴 Erro ao criar arquivo: " + err.Error() }
+	if err != nil { return "­ƒö┤ Erro ao criar arquivo: " + err.Error() }
 	defer file.Close()
 
 	// 1. Exportar Gold Samples como SFT (Conversational)
@@ -1881,7 +1881,7 @@ func (a *App) ExportRLHFDataset() string {
 
 		entry := map[string]interface{}{
 			"messages": []map[string]string{
-				{"role": "system", "content": "Você é o agente " + agent + " do enxame Lumaestro."},
+				{"role": "system", "content": "Voc├¬ ├® o agente " + agent + " do enxame Lumaestro."},
 				{"role": "user", "content": in},
 				{"role": "assistant", "content": out},
 			},
@@ -1892,28 +1892,28 @@ func (a *App) ExportRLHFDataset() string {
 		count++
 	}
 
-	return fmt.Sprintf("✅ Fábrica RLHF: %d exemplos de elite exportados para: %s", count, path)
+	return fmt.Sprintf("Ô£à F├íbrica RLHF: %d exemplos de elite exportados para: %s", count, path)
 }
 
 // SendMessageToSwarm permite ao Comandante intervir diretamente no enxame via Dashboard.
 func (a *App) SendMessageToSwarm(agentName, message string) string {
-	if a.LRouter == nil { return "🔴 Roteador offline." }
+	if a.LRouter == nil { return "­ƒö┤ Roteador offline." }
 	
-	fmt.Printf("[🕹️ COMANDO] Enviando ordem para %s: %s\n", agentName, message)
+	fmt.Printf("[­ƒò╣´©Å COMANDO] Enviando ordem para %s: %s\n", agentName, message)
 	
-	// Executa a ordem com resiliência total
-	response, provider, err := a.LRouter.ExecuteWithFallback(a.ctx, "Você é o Maestro do enxame Lumaestro. Responda à ordem do Comandante de forma executiva.", message)
-	if err != nil { return "🔴 Falha no comando: " + err.Error() }
+	// Executa a ordem com resili├¬ncia total
+	response, provider, err := a.LRouter.ExecuteWithFallback(a.ctx, "Voc├¬ ├® o Maestro do enxame Lumaestro. Responda ├á ordem do Comandante de forma executiva.", message)
+	if err != nil { return "­ƒö┤ Falha no comando: " + err.Error() }
 	
-	return fmt.Sprintf("💎 [%s] Resposta do Enxame: %s", provider, response)
+	return fmt.Sprintf("­ƒÆÄ [%s] Resposta do Enxame: %s", provider, response)
 }
 
-// RunReconScan dispara a busca por conexões perdidas e informa o frontend das propostas.
+// RunReconScan dispara a busca por conex├Áes perdidas e informa o frontend das propostas.
 func (a *App) RunReconScan() string {
-	if a.Recon == nil { return "🔴 Agente Recon offline." }
+	if a.Recon == nil { return "­ƒö┤ Agente Recon offline." }
 	
 	proposals, err := a.Recon.ScanMissingLinks(a.ctx)
-	if err != nil { return "🔴 Erro no Scan: " + err.Error() }
+	if err != nil { return "­ƒö┤ Erro no Scan: " + err.Error() }
 	
 	count := 0
 	for _, p := range proposals {
@@ -1923,24 +1923,24 @@ func (a *App) RunReconScan() string {
 		}
 	}
 	
-	return fmt.Sprintf("🕵️‍♂️ Recon Scan concluído! %d novas sinapses propostas para sua revisão.", count)
+	return fmt.Sprintf("­ƒòÁ´©ÅÔÇìÔÖé´©Å Recon Scan conclu├¡do! %d novas sinapses propostas para sua revis├úo.", count)
 }
 
 // PruneGraph executa a poda neural baseada em PageRank para limpar o Dashboard.
 func (a *App) PruneGraph(threshold float64) string {
-	if a.GEngine == nil { return "🔴 Motor de grafos offline." }
+	if a.GEngine == nil { return "­ƒö┤ Motor de grafos offline." }
 	
 	removed := a.GEngine.Prune(threshold)
 	if len(removed) > 0 {
 		// Sincroniza visualmente (Reset de Grafo no Front)
 		a.SyncAllNodes()
-		return fmt.Sprintf("🧹 Poda Neural concluída: %d nós irrelevantes removidos.", len(removed))
+		return fmt.Sprintf("­ƒº╣ Poda Neural conclu├¡da: %d n├│s irrelevantes removidos.", len(removed))
 	}
 	
-	return "✅ O grafo já está otimizado (sem nós abaixo do threshold)."
+	return "Ô£à O grafo j├í est├í otimizado (sem n├│s abaixo do threshold)."
 }
 
-// GetSkeletalGraph retorna apenas as arestas vitais (MST) para despoluir a visão.
+// GetSkeletalGraph retorna apenas as arestas vitais (MST) para despoluir a vis├úo.
 func (a *App) GetSkeletalGraph() map[string]interface{} {
 	if a.GEngine == nil { return nil }
 	
@@ -1950,7 +1950,7 @@ func (a *App) GetSkeletalGraph() map[string]interface{} {
 	}
 }
 
-// helper para contar comunidades únicas
+// helper para contar comunidades ├║nicas
 func countCommunities(ge *rag.GraphEngine) int {
-	return 5 // Placeholder estático para o HUD
+	return 5 // Placeholder est├ítico para o HUD
 }
