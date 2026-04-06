@@ -125,11 +125,10 @@ func (a *App) bootSequence() {
 			a.StartAgentSession(a.config.AutoStartAgents[0])
 		}
 
-		// 2. Indexação Silenciosa (RAG) - Agora com a Garantia Múltipla de Motor Separado (Background)
+		// 2. Indexação Silenciosa (RAG) - Agora com 100% de Autonomia (SDK Nativo)
 		if a.crawler != nil && a.config.ObsidianVaultPath != "" {
-			a.emitBoot("scan", "✈️", "Decolando Auto-Scan do Obsidian (Engine em Background)...")
-			fmt.Println("[BOOT] ✈️ Motores Prontos. Iniciando Crawler em sub-sessão separada...")
-			go a.StartBackgroundAgentSession("gemini")
+			a.emitBoot("scan", "✈️", "Iniciando Sincronização Semântica do Obsidian...")
+			fmt.Println("[BOOT] ✈️ Motores Prontos. Iniciando Crawler Nativo...")
 			a.ScanVault()
 		}
 
@@ -193,9 +192,8 @@ func (a *App) initServices() error {
 	}
 
 	a.embedder = emb
-	// 🧠 Migração para Modo Híbrido: Ontologia via Agente ACP (Local), Embeddings via API (KeyPool)
-	// A Ontologia usa a sessão de background para extrações não sujarem o chat
-	a.ontology = provider.NewOntologyService(a.ctx, a.executor, "acp-session-background-gemini")
+	// 🧠 Migração para Modo Híbrido: Ontologia e Web Weaving usam API Nativa GenAI (100x mais rápido e imune a falhas de IPC)
+	a.ontology = provider.NewOntologyService(a.ctx, a.embedder)
 
 	// Inicializa os órgãos de RAG e Aprendizado Neural
 	fmt.Println("[App] 🧠 Ativando Córtex Neural (Ranker & Decay)...")
@@ -381,9 +379,6 @@ func (a *App) ScanVault() string {
 			return
 		}
 
-		fmt.Println("[BACKEND] ⏳ Aguardando aquecimento do Motor ACP para Triplas (5s)...")
-		time.Sleep(5 * time.Second)
-
 		// 2. Mensagem silenciada no chat UI para respeitar o ambiente Black/Background
 		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 		// 	"source":  "CRAWLER",
@@ -408,6 +403,15 @@ func (a *App) ScanVault() string {
 			fmt.Printf("[BACKEND] Aviso: Erro ao indexar docs do sistema: %v\n", err)
 		}
 
+		// 3. Indexar Repositórios Dinâmicos Importados e fazer Code Crawl
+		if len(a.config.ExternalProjects) > 0 {
+			fmt.Println("[BACKEND] Iniciando expansão radial (Projetos satélites)...")
+			err = a.crawler.IndexRepositories(a.ctx, a.config.ExternalProjects)
+			if err != nil {
+				fmt.Printf("[BACKEND] Erro ao sincronizar external projects: %v\n", err)
+			}
+		}
+
 		// Silenciado para não sujar o Chat interativo
 		// runtime.EventsEmit(a.ctx, "agent:log", map[string]string{
 		// 	"source":  "CRAWLER",
@@ -415,6 +419,7 @@ func (a *App) ScanVault() string {
 		// })
 
 		// 3. Força a atualização visual de todos os nós (isolados e conectados)
+		os.Remove(".lumaestro_topology.json") // Invalida Topology Cache
 		a.SyncAllNodes()
 	}()
 
@@ -429,6 +434,53 @@ func (a *App) FullSync() string {
 	fmt.Println("[BACKEND] 🔄 Solicitado FullSync Atômico. Limpando cache...")
 	a.crawler.PurgeCache()
 	return a.ScanVault()
+}
+
+// AddExternalProject vincula um repositório inteiro e o expande via Crawler Radial
+func (a *App) AddExternalProject(path string, coreNode string, includeCode bool) map[string]interface{} {
+	cfg, err := config.Load()
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": "Erro de config interno"}
+	}
+
+	for _, p := range cfg.ExternalProjects {
+		if p.Path == path {
+			return map[string]interface{}{"success": false, "error": "Repositório já mapeado!"}
+		}
+	}
+
+	cfg.ExternalProjects = append(cfg.ExternalProjects, config.ProjectScan{
+		Path:        path,
+		CoreNode:    coreNode,
+		IncludeCode: includeCode,
+	})
+
+	config.Save(*cfg)
+	a.config = cfg
+
+	// Dispara a sincronização imediatamente e de forma limpa (Sincronizando Nodes via EventsEmit com ScanVault)
+	_ = a.ScanVault()
+
+	return map[string]interface{}{"success": true, "message": "Projetos satélite vinculados e auto-scan de gravidade acionado."}
+}
+
+// GetExternalProjects retorna os repositórios em formato JSON para Renderização no frontend (Settings)
+func (a *App) GetExternalProjects() []config.ProjectScan {
+	if a.config != nil {
+		return a.config.ExternalProjects
+	}
+	return []config.ProjectScan{}
+}
+
+// SelectDirectory abre o explorador de arquivos nativo do S.O. para escolher uma pasta
+func (a *App) SelectDirectory() string {
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Selecione o Repositório do Projeto",
+	})
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 // ResetQdrantDB apaga permanentemente o banco de dados remoto e limpa o cache local.
@@ -454,6 +506,7 @@ func (a *App) ResetQdrantDB() string {
 		fmt.Println("[RESET] 🧹 Limpando cache do Crawler...")
 		a.crawler.PurgeCache()
 	}
+	os.Remove(".lumaestro_topology.json") // Expurga cache visual 3D
 
 	// 3. Recria Infraestrutura do zero
 	fmt.Println("[RESET] 🏗️ Recriando infraestrutura (3072 dim)...")
@@ -472,6 +525,7 @@ func (a *App) ResetQdrantDB() string {
 
 // PurgeCache limpa todo o histórico de indexação local.
 func (a *App) PurgeCache() string {
+	os.Remove(".lumaestro_topology.json") // Invalida Topology Cache
 	if a.crawler == nil {
 		return "⚠️ Motor de indexação indisponível."
 	}
@@ -482,9 +536,41 @@ func (a *App) PurgeCache() string {
 	return "Cache de indexação limpo com sucesso!"
 }
 
+// Sincronização e I/O Desacoplado do Motor Físico
+func (a *App) saveTopologyCache(batch []map[string]interface{}) {
+	data, err := json.Marshal(batch)
+	if err == nil {
+		os.WriteFile(".lumaestro_topology.json", data, 0644)
+	}
+}
+
+func (a *App) loadTopologyCache() []map[string]interface{} {
+	data, err := os.ReadFile(".lumaestro_topology.json")
+	if err != nil {
+		return nil
+	}
+	var batch []map[string]interface{}
+	json.Unmarshal(data, &batch)
+	return batch
+}
+
 // SyncAllNodes percorre o banco de dados e emite cada nota para o visualizador 3D.
 func (a *App) SyncAllNodes() {
 	if a.qdrant == nil || a.ctx == nil {
+		return
+	}
+
+	// 1. TENTA TOPOLOGY CACHE (IGNORA O QDRANT INSTANTANEAMENTE SE EXISTIR)
+	cachedBatch := a.loadTopologyCache()
+	if cachedBatch != nil && len(cachedBatch) > 0 {
+		fmt.Printf("[Sync] ⚡ Carregando %d nós instantaneamente via Fast Topology Cache (0 delay de infraestrutura)...\n", len(cachedBatch))
+		runtime.EventsEmit(a.ctx, "graph:nodes:batch", cachedBatch)
+		
+		go func() {
+			time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
+			stats, _ := a.AnalyzeGraphHealth()
+			runtime.EventsEmit(a.ctx, "graph:health:update", stats)
+		}()
 		return
 	}
 
@@ -523,6 +609,9 @@ func (a *App) SyncAllNodes() {
 
 		batch = append(batch, nodeData)
 	}
+	
+	// Grava o Cache novinho em folha
+	a.saveTopologyCache(batch)
 
 	// Emite o pacote completo de uma só vez para evitar sobrecarga no motor gráfico
 	runtime.EventsEmit(a.ctx, "graph:nodes:batch", batch)

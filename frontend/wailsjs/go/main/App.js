@@ -6,6 +6,10 @@ export function AddComment(arg1, arg2) {
   return window['go']['main']['App']['AddComment'](arg1, arg2);
 }
 
+export function AddExternalProject(arg1, arg2, arg3) {
+  return window['go']['main']['App']['AddExternalProject'](arg1, arg2, arg3);
+}
+
 export function AddGeminiAccount(arg1) {
   return window['go']['main']['App']['AddGeminiAccount'](arg1);
 }
@@ -92,6 +96,10 @@ export function GetDocuments(arg1) {
 
 export function GetExecutiveSummary() {
   return window['go']['main']['App']['GetExecutiveSummary']();
+}
+
+export function GetExternalProjects() {
+  return window['go']['main']['App']['GetExternalProjects']();
 }
 
 export function GetGoals() {
@@ -216,6 +224,10 @@ export function SaveConfig(arg1) {
 
 export function ScanVault() {
   return window['go']['main']['App']['ScanVault']();
+}
+
+export function SelectDirectory() {
+  return window['go']['main']['App']['SelectDirectory']();
 }
 
 export function SendAgentInput(arg1, arg2, arg3) {

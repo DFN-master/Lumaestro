@@ -7,6 +7,8 @@ import {agents} from '../models';
 
 export function AddComment(arg1:string,arg2:string):Promise<string>;
 
+export function AddExternalProject(arg1:string,arg2:string,arg3:boolean):Promise<Record<string, any>>;
+
 export function AddGeminiAccount(arg1:string):Promise<void>;
 
 export function AddGoldSample(arg1:string,arg2:string,arg3:string):Promise<string>;
@@ -50,6 +52,8 @@ export function GetConfig():Promise<config.Config>;
 export function GetDocuments(arg1:string):Promise<Array<db.Document>>;
 
 export function GetExecutiveSummary():Promise<orchestration.ExecSummary>;
+
+export function GetExternalProjects():Promise<Array<config.ProjectScan>>;
 
 export function GetGoals():Promise<Array<db.Goal>>;
 
@@ -112,6 +116,8 @@ export function RunVectorDiagnostic():Promise<Record<string, any>>;
 export function SaveConfig(arg1:config.Config):Promise<string>;
 
 export function ScanVault():Promise<string>;
+
+export function SelectDirectory():Promise<string>;
 
 export function SendAgentInput(arg1:string,arg2:string,arg3:Array<Record<string, string>>):Promise<void>;
 

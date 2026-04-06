@@ -5,13 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"Lumaestro/internal/utils"
-)
 
-// Prompter define a interface necessária para realizar consultas ao agente local.
-type Prompter interface {
-	AskSync(sessionID string, prompt string, images []map[string]string) (string, error)
-}
+	"google.golang.org/genai"
+)
 
 // Triple representa a unidade básica de conhecimento semântico.
 type Triple struct {
@@ -37,24 +33,23 @@ type Relation struct {
 
 // OntologyService gerencia a extração de fatos estruturados via ACP (Agente Local).
 type OntologyService struct {
-	Prompter  Prompter
-	SessionID string
+	Embedder  *EmbeddingService
 	ctx       context.Context
 }
 
-// NewOntologyService inicializa o serviço com um Prompter (ex: ACPExecutor) e o ID da sessão.
-func NewOntologyService(ctx context.Context, prompter Prompter, sessionID string) *OntologyService {
-	return &OntologyService{Prompter: prompter, SessionID: sessionID, ctx: ctx}
+// NewOntologyService inicializa o serviço com o motor de embeddings (contendo o GenAI Client).
+func NewOntologyService(ctx context.Context, embedder *EmbeddingService) *OntologyService {
+	return &OntologyService{Embedder: embedder, ctx: ctx}
 }
 
-// ExtractTriples extrai fatos estruturados usando o Agente ACP (Gemini CLI).
+// ExtractTriples extrai fatos estruturados usando a API oficial do GenAI (bypassando o frágil CLI).
 func (s *OntologyService) ExtractTriples(ctx context.Context, text string, contextHint string) ([]Triple, error) {
 	prompt := fmt.Sprintf(`Extraia triplas semânticas (Sujeito-Predicado-Objeto) do texto abaixo.
 Retorne APENAS um ARRAY JSON puro. NÃO use tags de markdown e NÃO use wrappers como {"triples": [...]}.
 Exemplo exato do formato esperado:
 [
   {"subject": "Lumaestro", "predicate": "uses", "object": "Qdrant"}
-]
+ ]
 
 ## DICA DE CONTEXTO GLOBAL:
 Use esta informação para resolver pronomes como "ele", "ela", "o projeto", "a empresa": 
@@ -68,15 +63,28 @@ Use esta informação para resolver pronomes como "ele", "ela", "o projeto", "a 
 Texto:
 %s`, contextHint, text)
 
-	response, err := s.Prompter.AskSync(s.SessionID, prompt, nil)
-	if err != nil {
-		return nil, fmt.Errorf("falha na extração ACP: %w", err)
+	if s.Embedder == nil {
+		return nil, fmt.Errorf("serviço de motor generativo (Embedder) indisponível")
 	}
 
-	return parseTriples(response)
+	res, err := s.Embedder.GenerateContentWithRetry(ctx, genai.Text(prompt))
+	if err != nil {
+		return nil, fmt.Errorf("falha na extração de triplas (Motor Resiliente): %w", err)
+	}
+
+	if res == nil {
+		return nil, fmt.Errorf("resposta nula da API do Gemini")
+	}
+	
+	responseText := res.Text()
+	if responseText == "" {
+		return nil, fmt.Errorf("resposta sem texto da API do Gemini")
+	}
+
+	return parseTriples(responseText)
 }
 
-// ValidateConflict decide entre informações contraditórias usando o Agente ACP.
+// ValidateConflict decide entre informações contraditórias usando API nativa GenAI.
 func (s *OntologyService) ValidateConflict(ctx context.Context, oldFact, newFact, contextStr string) (string, error) {
 	prompt := fmt.Sprintf(`Você é o Agente Validador de Verdade.
 Detectamos um conflito no Grafo de Conhecimento.
@@ -91,18 +99,24 @@ Responda APENAS "CONFLICT" se houver dúvida real.
 
 Decisão:`, oldFact, newFact, contextStr)
 
-	response, err := s.Prompter.AskSync(s.SessionID, prompt, nil)
+	if s.Embedder == nil {
+		return "CONFLICT", fmt.Errorf("motor generativo indisponível")
+	}
+
+	res, err := s.Embedder.GenerateContentWithRetry(ctx, genai.Text(prompt))
 	if err != nil {
 		return "CONFLICT", err
 	}
 
-	if strings.Contains(strings.ToUpper(response), "UPDATE") {
-		return "UPDATE", nil
+	if res != nil && res.Text() != "" {
+		if strings.Contains(strings.ToUpper(res.Text()), "UPDATE") {
+			return "UPDATE", nil
+		}
 	}
 	return "CONFLICT", nil
 }
 
-// ProcessMedia extrai conhecimento de arquivos visuais via Agente ACP.
+// ProcessMedia extrai conhecimento de arquivos visuais via API Nativa GenAI.
 func (s *OntologyService) ProcessMedia(ctx context.Context, data []byte, mimeType string) (string, []Triple, error) {
 	prompt := `Analise este arquivo. Forneça uma descrição detalhada e extraia triplas semânticas (Sujeito, Predicado, Objeto).
 	
@@ -112,18 +126,31 @@ Formato:
 ---TRIPLAS---
 [JSON]`
 
-	// Prepara a imagem para o ACP
-	images := []map[string]string{
+	// 📸 Multimodal Nativo: Enviamos o prompt textual e os bytes do arquivo como Parts em um único Content
+	contents := []*genai.Content{
 		{
-			"type": mimeType,
-			"data": utils.EncodeBase64(data),
+			Parts: []*genai.Part{
+				genai.NewPartFromText(prompt),
+				{
+					InlineData: &genai.Blob{
+						MIMEType: mimeType,
+						Data:     data,
+					},
+				},
+			},
 		},
 	}
 
-	response, err := s.Prompter.AskSync(s.SessionID, prompt, images)
+	res, err := s.Embedder.GenerateContentWithRetry(ctx, contents)
 	if err != nil {
-		return "", nil, fmt.Errorf("erro no processamento multimodal ACP: %w", err)
+		return "", nil, fmt.Errorf("falha ao processar media multimodal (Motor Resiliente): %w", err)
 	}
+	
+	if res == nil || res.Text() == "" {
+		return "", nil, fmt.Errorf("resposta vazia no ProcessMedia")
+	}
+
+	response := res.Text()
 
 	parts := strings.Split(response, "---TRIPLAS---")
 	description := strings.TrimSpace(strings.TrimPrefix(parts[0], "---DESCRICAO---"))

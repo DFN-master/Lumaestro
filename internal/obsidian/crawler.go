@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"Lumaestro/internal/config"
 	"Lumaestro/internal/provider"
 	"Lumaestro/internal/utils"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -99,7 +100,7 @@ func (c *Crawler) IndexVault(ctx context.Context) error {
 			docType = "source"
 		}
 
-		indexed, err := c.processFile(ctx, path, info, docType)
+		indexed, err := c.processFile(ctx, path, info, docType, nil)
 		if err == nil {
 			if indexed {
 				totalIndexed++
@@ -151,7 +152,7 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 		}
 
 		// Indexa como tipo 'system' para diferenciação no 3D
-		indexed, err := c.processFile(ctx, path, info, "system")
+		indexed, err := c.processFile(ctx, path, info, "system", nil)
 		if err == nil && indexed {
 			totalIndexed++
 		}
@@ -167,8 +168,63 @@ func (c *Crawler) IndexSystemDocs(ctx context.Context, rootPath string) error {
 	return err
 }
 
+// IndexRepositories engloba a lógica radial: Lê repositórios importados, faz o RAG dos códigos (opcional) 
+// e gera os links implícitos apontando para a "Estrela Mãe" (CoreNode).
+func (c *Crawler) IndexRepositories(ctx context.Context, repositories []config.ProjectScan) error {
+	if err := c.EnsureCollections(ctx); err != nil {
+		return err
+	}
+
+	for _, repo := range repositories {
+		if repo.Path == "" { continue }
+
+		var totalIndexed int = 0
+		fmt.Printf("[Crawler] 🪐 Acionando RAG Radial no repousitório: %s (Núcleo: %s)\n", repo.Path, repo.CoreNode)
+		
+		filepath.Walk(repo.Path, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() { return nil }
+
+			pathLower := strings.ToLower(path)
+			if strings.Contains(pathLower, "node_modules") || 
+			   strings.Contains(pathLower, ".git") || 
+			   strings.Contains(pathLower, "build") ||
+			   strings.Contains(pathLower, "dist") {
+				return nil
+			}
+
+			ext := strings.ToLower(filepath.Ext(path))
+			isCode := ext == ".go" || ext == ".js" || ext == ".jsx" || ext == ".ts" || ext == ".tsx" || ext == ".py" || ext == ".html" || ext == ".css"
+			isMD := ext == ".md"
+			
+			if !isMD && !(isCode && repo.IncludeCode) {
+				return nil
+			}
+
+			// Injeta a gravidade: O CoreNode vira o link implícito dessa nota!
+			implicitEdge := []string{repo.CoreNode}
+			
+			docType := "project-file"
+			if isCode { docType = "code-file" }
+
+			indexed, err := c.processFile(ctx, path, info, docType, implicitEdge)
+			if err == nil && indexed {
+				totalIndexed++
+			}
+			return nil
+		})
+
+		if totalIndexed > 0 {
+			runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
+				"source":  "RADIAL",
+				"content": fmt.Sprintf("🌌 %s orbitado! %d fragmentos amarrados ao núcleo RAG.", repo.CoreNode, totalIndexed),
+			})
+		}
+	}
+	return nil
+}
+
 // processFile é o núcleo de inteligência que processa, extrai triplas e salva no Qdrant
-func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo, forcedDocType string) (bool, error) {
+func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo, forcedDocType string, implicitLinks []string) (bool, error) {
 	// 🔍 LOG DE DIAGNÓSTICO: Vermos exatamente o que o crawler está percorrendo
 	fmt.Printf("[Crawler] Auditando: %s\n", path)
 
@@ -176,8 +232,9 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 	isMD := ext == ".md"
 	isImage := ext == ".png" || ext == ".jpg" || ext == ".jpeg"
 	isPDF := ext == ".pdf"
+	isCode := ext == ".go" || ext == ".js" || ext == ".jsx" || ext == ".ts" || ext == ".tsx" || ext == ".py" || ext == ".html" || ext == ".css"
 
-	if !isMD && !isImage && !isPDF {
+	if !isMD && !isImage && !isPDF && !isCode {
 		return false, nil
 	}
 
@@ -225,8 +282,13 @@ func (c *Crawler) processFile(ctx context.Context, path string, info os.FileInfo
 	var textContent string
 	var triples []provider.Triple
 	var links []string
+	
+	// Adiciona os links orbitais (radiais implícitos)
+	if len(implicitLinks) > 0 {
+		links = append(links, implicitLinks...)
+	}
 
-	if isMD {
+	if isMD || isCode {
 		textContent = string(rawContent)
 		
 		// Desambiguação (Context Graphs): Extrai o título e o início para resolver pronomes

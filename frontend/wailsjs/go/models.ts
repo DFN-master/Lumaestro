@@ -53,6 +53,22 @@ export namespace config {
 	        this.workspaces = source["workspaces"];
 	    }
 	}
+	export class ProjectScan {
+	    path: string;
+	    core_node: string;
+	    include_code: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProjectScan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.core_node = source["core_node"];
+	        this.include_code = source["include_code"];
+	    }
+	}
 	export class GeminiAccount {
 	    name: string;
 	    home_dir: string;
@@ -85,6 +101,7 @@ export namespace config {
 	    auto_start_agents: string[];
 	    agent_language: string;
 	    max_concurrent_agents: number;
+	    external_projects: ProjectScan[];
 	    graph_depth: number;
 	    graph_neighbor_limit: number;
 	    graph_context_limit: number;
@@ -111,6 +128,7 @@ export namespace config {
 	        this.auto_start_agents = source["auto_start_agents"];
 	        this.agent_language = source["agent_language"];
 	        this.max_concurrent_agents = source["max_concurrent_agents"];
+	        this.external_projects = this.convertValues(source["external_projects"], ProjectScan);
 	        this.graph_depth = source["graph_depth"];
 	        this.graph_neighbor_limit = source["graph_neighbor_limit"];
 	        this.graph_context_limit = source["graph_context_limit"];
@@ -137,6 +155,7 @@ export namespace config {
 		    return a;
 		}
 	}
+	
 	
 
 }

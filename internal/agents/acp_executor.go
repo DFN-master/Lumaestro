@@ -1026,7 +1026,9 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 	}
 
 	var response map[string]interface{}
-	if err := json.Unmarshal(result, &response); err == nil {
+	errJson := json.Unmarshal(result, &response)
+	
+	if errJson == nil && response != nil {
 		// 1. Captura de SessionID (Handshake Estágio 2)
 		if sessID, ok := response["sessionId"].(string); ok {
 			h.Session.ACPSessID = sessID
@@ -1037,15 +1039,23 @@ func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, r
 			}
 			return
 		}
+	}
+	
+	// PRINT DE EMERGÊNCIA E ARQUIVO
+	debugMsg := fmt.Sprintf("ID: %v\nResult: %s\nJsonErr: %v\n==================\n", id, string(result), errJson)
+	fmt.Print("[ACP Debug] ", debugMsg)
+	if f, errFile := os.OpenFile("acp_debug.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); errFile == nil {
+		f.WriteString(debugMsg)
+		f.Close()
+	}
 
-		select {
-		case h.Session.initDone <- struct{}{}:
-		default:
-		}
-		// Sincroniza lista após carregar uma sessão ou finalizar um turno
-		if !strings.Contains(h.Session.ID, "-background-") {
-			runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
-		}
+	select {
+	case h.Session.initDone <- struct{}{}:
+	default:
+	}
+	// Sincroniza lista após carregar uma sessão ou finalizar um turno
+	if !strings.Contains(h.Session.ID, "-background-") {
+		runtime.EventsEmit(h.Executor.Ctx, "agent:turn_complete", h.Session.AgentName)
 	}
 }
 

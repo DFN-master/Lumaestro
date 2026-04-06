@@ -27,6 +27,13 @@ type GeminiAccount struct {
 	Exhausted bool   `json:"exhausted"`
 }
 
+// ProjectScan mapeia uma pasta que serve como repositório secundário (satélite/aglomerado)
+type ProjectScan struct {
+	Path        string `json:"path"`
+	CoreNode    string `json:"core_node"` // Nó raíz radial (ex: MóduloAuth, Gesttik)
+	IncludeCode bool   `json:"include_code"` // Se true, o Code RAG roda em todo o source no diretório
+}
+
 // Config representa as configurações globais do orquestrador.
 type Config struct {
 	ObsidianVaultPath string         `json:"obsidian_vault_path"`
@@ -42,6 +49,7 @@ type Config struct {
 	AutoStartAgents   []string       `json:"auto_start_agents"`
 	AgentLanguage     string         `json:"agent_language"`
 	MaxConcurrentAgents int          `json:"max_concurrent_agents"` // 🌟 Limite de Enxame (Swarm)
+	ExternalProjects  []ProjectScan `json:"external_projects"` // 🌟 Repositórios e Aglomerados Code RAG
 	GraphDepth        int            `json:"graph_depth"`         // Profundidade de navegação de links (padrão: 1)
 	GraphNeighborLimit int            `json:"graph_neighbor_limit"` // Máximo de vizinhos por nó (padrão: 5)
 	GraphContextLimit int            `json:"graph_context_limit"` // Limite de chars do contexto expandido (padrão: 4000)

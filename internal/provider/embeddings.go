@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"Lumaestro/internal/config"
 	"Lumaestro/internal/utils"
@@ -10,23 +12,45 @@ import (
 	"google.golang.org/genai"
 )
 
-// EmbeddingService gerencia a geração de vetores via Gemini com suporte a pool de chaves.
+// EmbeddingService gerencia a geração de vetores e conteúdo via Gemini com suporte a pool de chaves e cascata de modelos.
 type EmbeddingService struct {
-	Client *genai.Client
-	ctx    context.Context
+	Client        *genai.Client
+	ctx           context.Context
+	Mu            sync.Mutex
+	keys          []string
+	CurrentKeyIdx int
 }
 
-// NewEmbeddingService inicializa o serviço com a API Key ativa do pool.
+// NewEmbeddingService inicializa o serviço com o pool de chaves configurado.
 func NewEmbeddingService(ctx context.Context, apiKey string) (*EmbeddingService, error) {
+	cfg, _ := config.Load()
+	var keys []string
+	if cfg != nil {
+		keys = cfg.GetGeminiKeys()
+	}
+	if len(keys) == 0 && apiKey != "" {
+		keys = []string{apiKey}
+	}
+
+	activeKey := apiKey
+	if len(keys) > 0 {
+		activeKey = keys[0]
+	}
+
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
+		APIKey:  activeKey,
 		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("falha ao criar cliente GenAI: %w", err)
 	}
 
-	return &EmbeddingService{Client: client, ctx: ctx}, nil
+	return &EmbeddingService{
+		Client:        client,
+		ctx:           ctx,
+		keys:          keys,
+		CurrentKeyIdx: 0,
+	}, nil
 }
 
 // rotateAndRetry tenta rotacionar a chave e recriar o client.
@@ -88,46 +112,108 @@ func (s *EmbeddingService) GenerateMultimodalEmbedding(ctx context.Context, data
 	return s.embedWithRetry(ctx, contents)
 }
 
-// embedWithRetry é o motor central que realiza a chamada e gerencia a rotação de chaves.
+// embedWithRetry é o motor central que realiza a chamada e gerencia a rotação de chaves com Throttle defensivo.
 func (s *EmbeddingService) embedWithRetry(ctx context.Context, contents []*genai.Content) ([]float32, error) {
 	model := "gemini-embedding-2-preview"
 
-	res, err := s.Client.Models.EmbedContent(ctx, model, contents, nil)
-	if err != nil {
-		if utils.IsQuotaError(err) {
-			fmt.Printf("[KeyPool] ⚠️ Chave exausta (quota) em Embeddings. Tentando próxima...\n")
-
-			cfg, _ := config.Load()
-			maxRetries := 0
-			if cfg != nil {
-				maxRetries = cfg.GeminiKeyCount() - 1
+	for {
+		res, err := s.Client.Models.EmbedContent(ctx, model, contents, nil)
+		if err == nil {
+			if len(res.Embeddings) > 0 && res.Embeddings[0] != nil && len(res.Embeddings[0].Values) > 0 {
+				return res.Embeddings[0].Values, nil
 			}
+			return nil, fmt.Errorf("vetor de embedding vazio na resposta")
+		}
 
-			for i := 0; i < maxRetries; i++ {
-				if !s.rotateAndRetry() {
-					break
-				}
-				res, err = s.Client.Models.EmbedContent(ctx, model, contents, nil)
-				if err == nil {
-					break
-				}
-				if !utils.IsQuotaError(err) {
-					return nil, fmt.Errorf("erro fatal em embedding (pós-rotação): %w", err)
-				}
-				fmt.Printf("[KeyPool] ⚠️ Chave #%d também exausta: %s\n", i+2, utils.FormatGenAIError(err))
-			}
-
-			if err != nil {
-				return nil, fmt.Errorf("todas as chaves do pool foram exaustas: %w", err)
-			}
-		} else {
+		if !utils.IsQuotaError(err) {
 			return nil, fmt.Errorf("erro ao gerar embedding: %w", err)
 		}
+
+		fmt.Printf("[KeyPool] ⚠️ Chave atual exausta (quota). Tentando rotacionar...\n")
+
+		cfg, _ := config.Load()
+		maxRetries := 0
+		if cfg != nil {
+			maxRetries = cfg.GeminiKeyCount() - 1
+		}
+
+		rotatedSuccess := false
+		for i := 0; i < maxRetries; i++ {
+			if !s.rotateAndRetry() {
+				break
+			}
+			res, err = s.Client.Models.EmbedContent(ctx, model, contents, nil)
+			if err == nil {
+				rotatedSuccess = true
+				break
+			}
+			if !utils.IsQuotaError(err) {
+				return nil, fmt.Errorf("erro fatal em embedding (pós-rotação): %w", err)
+			}
+			fmt.Printf("[KeyPool] ⚠️ Chave #%d também exausta: %s\n", i+2, utils.FormatGenAIError(err))
+		}
+
+		if rotatedSuccess {
+			if len(res.Embeddings) > 0 && res.Embeddings[0] != nil && len(res.Embeddings[0].Values) > 0 {
+				return res.Embeddings[0].Values, nil
+			}
+			return nil, fmt.Errorf("vetor de embedding vazio na resposta")
+		}
+
+		// Throttle Defensivo: Quando todas as N chaves falham de cota, em vez de pular o arquivo e abortar,
+		// O Backend bloqueia/hiberna por 30s. Isso perfeitamente alinha com a janela RPM de reset da API do Gemini.
+		fmt.Println("⏳ [KeyPool] 🚨 Todas as chaves bateram o limite! Entrando em hibernação forçada de 30s para não perder arquivos... 😴")
+		time.Sleep(30 * time.Second)
+		fmt.Println("⚡ [KeyPool] Acordando da hibernação. Retomando embeddings do ponto em que parou...")
+	}
+}
+
+// GenerateContentWithRetry é o motor generativo unificado para textos e multimídia com Cascata de Modelos (Gemini -> Gemma) e Rotação de Chaves.
+func (s *EmbeddingService) GenerateContentWithRetry(ctx context.Context, contents []*genai.Content) (*genai.GenerateContentResponse, error) {
+	// Super Frota Atualizada (Padrão Junho/2026): Resiliência Extrema
+	models := []string{
+		"gemini-3.1-flash-lite-preview", // 🚀 Velocidade de Triplas (Lite 3.1)
+		"gemini-2.5-flash",              // 🏆 Capitão Confirmado (Flash 2.5)
+		"gemini-3-flash-preview",        // ⚖️ Moderno (Flash 3)
+		"gemini-2.5-flash-lite",         // 📦 Escala de Volume
+		"gemma-4-31b-it",                // 🛡️ O Tanque (Resiliência)
+		"gemma-4-26b-a4b-it",            // 🐘 Reserva Tática
 	}
 
-	if len(res.Embeddings) == 0 || res.Embeddings[0] == nil || len(res.Embeddings[0].Values) == 0 {
-		return nil, fmt.Errorf("vetor de embedding vazio na resposta")
-	}
+	for {
+		for _, model := range models {
+			// Tenta todas as chaves disponíveis para o modelo atual
+			for i, key := range s.keys {
+				// Garantir que o cliente usa a chave correta para esta tentativa
+				client, _ := genai.NewClient(ctx, &genai.ClientConfig{APIKey: key, Backend: genai.BackendGeminiAPI})
 
-	return res.Embeddings[0].Values, nil
+				fmt.Printf("[ResilienceFleet] 🚀 Tentando modelo: %s (Chave %d/%d)\n", model, i+1, len(s.keys))
+
+				resp, err := client.Models.GenerateContent(ctx, model, contents, nil)
+				if err == nil {
+					// Sincroniza a chave de sucesso no estado do serviço para próximas chamadas rápidas
+					s.Mu.Lock()
+					s.CurrentKeyIdx = i
+					s.Client = client
+					s.Mu.Unlock()
+					return resp, nil
+				}
+
+				// Se for erro de cota (429), tenta a próxima CHAVE para o MESMO modelo
+				if utils.IsQuotaError(err) {
+					fmt.Printf("[ResilienceFleet] ⚠️ Cota exaurida no modelo %s (Chave %d). Rotacionando chave...\n", model, i+1)
+					continue
+				}
+
+				// 🧠 Se for qualquer outro erro (404, 500, etc), PULA para o próximo MODELO na frota
+				fmt.Printf("[ResilienceFleet] 🚩 Erro no modelo %s: %v. Pulando para o próximo modelo na cascata...\n", model, err)
+				break // Sai do loop de chaves, vai para o próximo modelo
+			}
+		}
+
+		// Hibernação Defensiva: Se todos os modelos em todas as chaves falharem
+		fmt.Println("⏳ [ResilienceFleet] 🚨 Todos os modelos e chaves falharam! Hibernação de 30s... 😴")
+		time.Sleep(30 * time.Second)
+		fmt.Println("⚡ [ResilienceFleet] Acordando. Reiniciando ciclo de cascata...")
+	}
 }

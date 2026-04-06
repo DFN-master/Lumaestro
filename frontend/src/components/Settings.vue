@@ -247,6 +247,47 @@ const handleResetDB = async () => {
     isResetting.value = false
   }
 }
+
+// 🪐 Estados para Painel de Repositórios / Aglomerados
+const repoPathInput = ref('')
+const coreNodeInput = ref('')
+const includeCodeToggle = ref(false)
+const repoStatusMsg = ref('')
+
+const handleAddProject = async () => {
+  if (!repoPathInput.value || !coreNodeInput.value) {
+    alert("Preencha todos os campos obrigatórios do Projeto Satélite.")
+    return
+  }
+  repoStatusMsg.value = "Aguarde... Engajando Crawlers no Repositório (Isso pode demorar dependendo da codebase)..."
+  try {
+    const res = await window.go.main.App.AddExternalProject(repoPathInput.value, coreNodeInput.value, includeCodeToggle.value)
+    if (res.success) {
+      alert("🪐 " + res.message)
+      const cfg = await GetConfig()
+      if (cfg) config.value = Object.assign({}, config.value, cfg)
+      repoPathInput.value = ''
+      coreNodeInput.value = ''
+      includeCodeToggle.value = false
+    } else {
+      alert("Erro: " + res.error)
+    }
+  } catch (e) {
+    alert("Falha Crítica ao vincular repositório: " + e)
+  }
+  repoStatusMsg.value = ''
+}
+
+const handleSelectDirectory = async () => {
+  try {
+    const dir = await window.go.main.App.SelectDirectory()
+    if (dir && dir.trim() !== '') {
+      repoPathInput.value = dir
+    }
+  } catch (e) {
+    console.warn("Navegador de pastas cancelado ou erro:", e)
+  }
+}
 </script>
 
 <template>
@@ -258,7 +299,7 @@ const handleResetDB = async () => {
     </div>
 
     <div class="tabs-nav-glass">
-      <button v-for="tab in ['geral', 'chaves', 'motores', 'contas', 'seguranca', 'mcp']" 
+      <button v-for="tab in ['geral', 'chaves', 'motores', 'contas', 'seguranca', 'mcp', 'repositórios']" 
               :key="tab"
               @click="activeTab = tab" 
               :class="{ 'active': activeTab === tab }" 
@@ -606,6 +647,74 @@ const handleResetDB = async () => {
               <div class="output-header">SERVIDORES CONFIGURADOS</div>
               <pre class="mcp-output-box">{{ mcpServers }}</pre>
            </div>
+        </div>
+      </section>
+
+      <!-- ABA REPOSITÓRIOS (Code RAG & Aglomerados Radiais) -->
+      <section v-if="activeTab === 'repositórios'" class="glass-panel animate-slide-up">
+        <h2 class="section-title">Aglomerados Estelares (Repositórios Radiais)</h2>
+        <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
+          Injete pastas de projetos locais no Grafo do Lumaestro. Estes projetos formarão órbitas concêntricas independentes (RAG Radial) protegidas de poluição vetorial, orbitando seu respectivo <b>Nó Núcleo</b>.
+        </p>
+
+        <div class="mcp-restored-form" style="border: 1px solid rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.03); padding: 2.5rem; border-radius: 20px;">
+           <div class="form-grid">
+             <div class="premium-form-group">
+                <label>Caminho Absoluto do Repositório</label>
+                <div style="display: flex; gap: 10px;">
+                  <input v-model="repoPathInput" placeholder="Ex: C:\git\Lumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4); flex: 1;" />
+                  <button @click="handleSelectDirectory" class="btn-glow-blue" style="flex: 0 0 auto; padding: 0 24px; font-size: 1.2rem; background: linear-gradient(135deg, #a855f7, #6366f1); border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 14px;" title="Navegar e Escolher Pasta">
+                    📁
+                  </button>
+                </div>
+             </div>
+             <div class="premium-form-group">
+                <label>Nome do Núcleo Satélite (Core Node)</label>
+                <input v-model="coreNodeInput" placeholder="Ex: ProjetoLumaestro" class="maestro-input" style="border-color: rgba(139, 92, 246, 0.4);" />
+             </div>
+           </div>
+
+           <!-- Code RAG Toggle Switch Premium -->
+           <div class="sec-card" style="margin-top: 1rem; margin-bottom: 2.5rem; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05); padding: 1.5rem 2.5rem; display: flex; align-items: center; justify-content: space-between;">
+              <div class="sec-info" style="flex: 1;">
+                 <h5 style="margin: 0; font-weight: 800; font-size: 1rem; color: #10b981;">Devorar Código Fonte (Code RAG)</h5>
+                 <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--p-text-dim);">Ativando isto, além de .MD e Imagens, a IA irá ler, processar e gerar semânticas de todos os códigos .js, .go, .py e .ts.</p>
+              </div>
+              <label class="hybrid-toggle-maestro">
+                 <input type="checkbox" v-model="includeCodeToggle" />
+                 <span class="m-slider-sec" style="background: rgba(16, 185, 129, 0.1);"></span>
+              </label>
+           </div>
+
+           <button @click="handleAddProject" :disabled="repoStatusMsg !== ''" class="btn-glow-blue" style="width: 100%; background: linear-gradient(135deg, #a855f7, #6366f1); border: 1px solid rgba(168, 85, 247, 0.5);">
+              <span v-if="repoStatusMsg === ''">VINCULAR REPOSITÓRIO À SINFORNIA 🪐</span>
+              <span v-else>{{ repoStatusMsg }}</span>
+           </button>
+        </div>
+
+        <div style="margin-top: 4rem;">
+          <h3 style="font-size: 1rem; color: #fff; letter-spacing: 2px; margin-bottom: 1.5rem;">SISTEMAS SOLARES (Orquestrados)</h3>
+          
+          <div v-if="!config.external_projects || config.external_projects.length === 0" style="color: var(--p-text-dim); text-align: center; padding: 2rem; border-radius: 12px; border: 1px dashed rgba(255,255,255,0.1);">
+             O Universo ainda não possui outros projetos em órbita.
+          </div>
+          
+          <div v-else class="satellites-grid">
+             <div v-for="proj in config.external_projects" :key="proj.path" class="satellite-card">
+               <div class="sat-core">
+                 <div class="sat-ring-icon">🪐</div>
+                 <h4 class="sat-node-name">{{ proj.core_node }}</h4>
+                 <div class="sat-badge" :class="proj.include_code ? 'neo-active' : 'neo-docs'">
+                   {{ proj.include_code ? '⚡ CODE RAG' : '📄 APENAS DOCS' }}
+                 </div>
+               </div>
+               
+               <div class="sat-path-box">
+                 <span style="opacity: 0.6; margin-right: 8px;">📂</span>
+                 <span>{{ proj.path }}</span>
+               </div>
+             </div>
+          </div>
         </div>
       </section>
     </div>
@@ -1306,5 +1415,107 @@ input:checked + .m-slider::before { transform: translateX(20px); background: #ff
   background: #ef4444;
   color: #fff;
   box-shadow: 0 5px 20px rgba(239, 68, 68, 0.4);
+}
+
+/* --- SATELLITE CARDS (GLASSMORPHISM PREMIUM) --- */
+.satellites-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+}
+
+.satellite-card {
+  background: linear-gradient(145deg, rgba(139, 92, 246, 0.08) 0%, rgba(15, 15, 20, 0.6) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-top: 2px solid #8b5cf6;
+  border-radius: 16px;
+  padding: 1.5rem 1.8rem;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+  overflow: hidden;
+}
+
+.satellite-card::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%; width: 200%; height: 200%;
+  background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 40%);
+  opacity: 0;
+  transition: 0.5s;
+  pointer-events: none;
+}
+
+.satellite-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 15px 40px -10px rgba(139, 92, 246, 0.25);
+}
+
+.satellite-card:hover::before { opacity: 1; }
+
+.sat-core {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 1.5rem;
+}
+
+.sat-ring-icon {
+  font-size: 2.2rem;
+  filter: drop-shadow(0 0 12px rgba(139, 92, 246, 0.5));
+}
+
+.sat-node-name {
+  margin: 0;
+  flex: 1;
+  color: #f8fafc;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-shadow: 0 2px 10px rgba(255,255,255,0.1);
+}
+
+.sat-badge {
+  font-size: 0.65rem;
+  font-weight: 900;
+  padding: 6px 14px;
+  border-radius: 6px;
+  letter-spacing: 1.5px;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sat-badge.neo-active {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+}
+
+.sat-badge.neo-docs {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.05);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.sat-path-box {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  word-break: break-all;
+  display: flex;
+  align-items: center;
 }
 </style>
