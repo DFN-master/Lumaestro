@@ -64,7 +64,7 @@ func sweepAndWake(onWakeUp func(agent db.Agent, runID uuid.UUID)) {
 			Status:           "running", // Já coloca como running pra travar
 		}
 		
-		now := time.Now()
+		now := db.Timestamp(time.Now())
 		run.StartedAt = &now
 		db.InstanceDB.Create(&run)
 
@@ -90,7 +90,7 @@ func FinalizeHeartbeat(agentID uuid.UUID, runID uuid.UUID, success bool, executi
 		run.Error = executionError
 	}
 
-	now := time.Now()
+	now := db.Timestamp(time.Now())
 	run.FinishedAt = &now
 	db.InstanceDB.Save(&run)
 

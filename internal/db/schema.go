@@ -1,17 +1,56 @@
 package db
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
+// Timestamp é um wrapper para time.Time que resolve o erro de binding do Wails v2 (Not found: time.Time)
+type Timestamp time.Time
+
+func (t Timestamp) MarshalJSON() ([]byte, error) {
+	if time.Time(t).IsZero() {
+		return []byte("null"), nil
+	}
+	return []byte(fmt.Sprintf("\"%s\"", time.Time(t).Format(time.RFC3339))), nil
+}
+
+func (t *Timestamp) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		return nil
+	}
+	parsed, err := time.Parse(`"`+time.RFC3339+`"`, string(data))
+	if err != nil {
+		return err
+	}
+	*t = Timestamp(parsed)
+	return nil
+}
+
+func (t Timestamp) Value() (driver.Value, error) {
+	return time.Time(t), nil
+}
+
+func (t *Timestamp) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+	if v, ok := value.(time.Time); ok {
+		*t = Timestamp(v)
+		return nil
+	}
+	return fmt.Errorf("tipo incompatível para Timestamp: %v", value)
+}
+
 // Base model using UUID em vez do uint ID
 type Base struct {
 	ID        uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt Timestamp `json:"created_at"`
+	UpdatedAt Timestamp `json:"updated_at"`
 }
 
 // Antes de criar, gerar UUID se necessário
@@ -32,7 +71,7 @@ type Agent struct {
 	Capabilities       string     `json:"capabilities"`
 	BudgetMonthlyCents int        `gorm:"not null;default:0" json:"budget_monthly_cents"`
 	SpentMonthlyCents  int        `gorm:"not null;default:0" json:"spent_monthly_cents"`
-	LastHeartbeatAt    time.Time  `json:"last_heartbeat_at"`
+	LastHeartbeatAt    Timestamp  `json:"last_heartbeat_at"`
 }
 
 // 16.1 AgentSecrets (API Keys e Chaves de Terceiros)
@@ -62,7 +101,7 @@ type Project struct {
 	Description   string     `json:"description"`
 	Status        string     `gorm:"default:'backlog'" json:"status"`
 	LeadAgentID   *uuid.UUID `gorm:"type:uuid;index" json:"lead_agent_id"`
-	TargetDate    *time.Time `json:"target_date"`
+	TargetDate    *Timestamp `json:"target_date"`
 }
 
 // 7.6 Issue (Tarefa Unica)
@@ -78,8 +117,8 @@ type Issue struct {
 	AssigneeAgentID   *uuid.UUID `gorm:"type:uuid;index" json:"assignee_agent_id"`
 	AssigneeAgent     *Agent     `json:"assignee_agent" gorm:"foreignKey:AssigneeAgentID"`
 	CreatedByAgentID  *uuid.UUID `gorm:"type:uuid" json:"created_by_agent_id"`
-	StartedAt         *time.Time `json:"started_at"`
-	CompletedAt       *time.Time `json:"completed_at"`
+	StartedAt         *Timestamp `json:"started_at"`
+	CompletedAt       *Timestamp `json:"completed_at"`
 }
 
 // 7.7 IssueComment (Timeline)
@@ -135,8 +174,8 @@ type HeartbeatRun struct {
 	InvocationSource string     `json:"invocation_source"` // scheduler | manual
 	Status           string     `gorm:"index" json:"status"` // succeeded | failed | running
 	Error            string     `json:"error"`
-	StartedAt        *time.Time `json:"started_at"`
-	FinishedAt       *time.Time `json:"finished_at"`
+	StartedAt        *Timestamp `json:"started_at"`
+	FinishedAt       *Timestamp `json:"finished_at"`
 }
 
 type CostEvent struct {
@@ -148,7 +187,7 @@ type CostEvent struct {
 	InputTokens  int        `json:"input_tokens"`
 	OutputTokens int        `json:"output_tokens"`
 	CostCents    int        `json:"cost_cents"`
-	OccurredAt   time.Time  `json:"occurred_at"`
+	OccurredAt   Timestamp  `json:"occurred_at"`
 }
 
 // 7.10 Approvals (Portões Humanos)
@@ -159,7 +198,7 @@ type Approval struct {
 	Status              string     `gorm:"default:'pending';index" json:"status"`
 	Payload             string     `gorm:"type:text" json:"payload"`
 	DecisionNote        string     `json:"decision_note"`
-	DecidedAt           *time.Time `json:"decided_at"`
+	DecidedAt           *Timestamp `json:"decided_at"`
 }
 
 type ActivityLog struct {

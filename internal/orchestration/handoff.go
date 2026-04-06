@@ -62,7 +62,7 @@ func CompleteTask(agentID, issueID uuid.UUID) error {
 		return err
 	}
 
-	now := time.Now()
+	now := db.Timestamp(time.Now())
 	issue.Status = "done"
 	issue.CompletedAt = &now
 
