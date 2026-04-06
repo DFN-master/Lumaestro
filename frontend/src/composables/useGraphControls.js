@@ -1,0 +1,98 @@
+import * as THREE from 'three'
+import { useGraphStore } from '../stores/graph'
+
+/**
+ * 🎮 useGraphControls — Navegação Gamificada (WASD + QE)
+ * 
+ * Responsável por:
+ * - Captura de teclas WASD + Q/E para movimentação FPS
+ * - Cálculo de vetores de direção via câmera THREE.js
+ * - Loop de animação via requestAnimationFrame
+ * - Proteção contra input em campos de texto
+ */
+export function useGraphControls() {
+  const store = useGraphStore()
+  
+  const keys = { w: false, a: false, s: false, d: false, q: false, e: false }
+  const moveSpeed = 20
+  let moveInterval = null
+
+  const isInputFocused = () => {
+    const el = document.activeElement
+    return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
+  }
+
+  const startMoving = () => {
+    const move = () => {
+      const Graph = store.graphInstance
+      if (!Graph) return
+      
+      const camera = Graph.camera()
+      const pos = Graph.cameraPosition()
+      const direction = new THREE.Vector3()
+      camera.getWorldDirection(direction)
+      
+      const right = new THREE.Vector3().crossVectors(camera.up, direction).normalize()
+      
+      let dx = 0, dy = 0, dz = 0
+
+      if (keys.w) { dx += direction.x * moveSpeed; dy += direction.y * moveSpeed; dz += direction.z * moveSpeed; }
+      if (keys.s) { dx -= direction.x * moveSpeed; dy -= direction.y * moveSpeed; dz -= direction.z * moveSpeed; }
+      if (keys.a) { dx += right.x * moveSpeed; dy += right.y * moveSpeed; dz += right.z * moveSpeed; }
+      if (keys.d) { dx -= right.x * moveSpeed; dy -= right.y * moveSpeed; dz -= right.z * moveSpeed; }
+      if (keys.q) { dy -= moveSpeed; }
+      if (keys.e) { dy += moveSpeed; }
+
+      if (dx !== 0 || dy !== 0 || dz !== 0) {
+        Graph.cameraPosition({
+          x: pos.x + dx,
+          y: pos.y + dy,
+          z: pos.z + dz
+        })
+      }
+
+      moveInterval = requestAnimationFrame(move)
+    }
+    moveInterval = requestAnimationFrame(move)
+  }
+
+  const handleKeyDown = (e) => {
+    if (isInputFocused()) return
+    const k = e.key.toLowerCase()
+    if (k in keys) {
+      keys[k] = true
+      if (!moveInterval) startMoving()
+    }
+  }
+
+  const handleKeyUp = (e) => {
+    const k = e.key.toLowerCase()
+    if (k in keys) keys[k] = false
+    
+    // Para o loop se todas as teclas forem soltas
+    if (!Object.values(keys).some(v => v)) {
+      if (moveInterval) {
+        cancelAnimationFrame(moveInterval)
+        moveInterval = null
+      }
+    }
+  }
+
+  /**
+   * Registra os listeners de teclado no window
+   * @returns {Function} Cleanup function para chamar em onUnmounted
+   */
+  const registerKeyboardControls = () => {
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+
+    // Retorna a função de limpeza
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      if (moveInterval) cancelAnimationFrame(moveInterval)
+    }
+  }
+
+  return { registerKeyboardControls }
+}
