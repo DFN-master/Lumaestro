@@ -140,7 +140,7 @@ func (a *App) bootSequence() {
 // ensureCollections garante que o banco de dados Qdrant esteja pronto para uso.
 func (a *App) ensureCollections() {
 	collections := []string{"obsidian_knowledge", "knowledge_graph"}
-	dimension := 768 // Padrão para gemini-embedding-2-preview
+	dimension := 3072 // Gemini Embedding v2 Dimension (768 era v1)
 
 	for _, name := range collections {
 		exists, err := a.qdrant.CheckCollectionExists(name)
@@ -178,7 +178,7 @@ func (a *App) initServices() error {
 	a.config = cfg
 
 	// Inicializa Qdrant e Embeddings
-	fmt.Println("[App] 🔋 Conectando ao motor vetorial Qdrant...")
+	fmt.Printf("[App] 🔋 Conectando ao motor vetorial Qdrant em: %s\n", cfg.QdrantURL)
 	a.emitBoot("qdrant", "🔋", "Conectando ao banco vetorial Qdrant...")
 	a.qdrant = provider.NewQdrantClient(cfg.QdrantURL, cfg.QdrantAPIKey)
 

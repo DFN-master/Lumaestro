@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -106,10 +107,6 @@ func (c *Config) GeminiKeyCount() int {
 }
 
 func getConfigPath() string {
-	// Se existir um arquivo na raiz do projeto durante o Wails Dev, usar ele!
-	if _, err := os.Stat("../../.lumaestro.json"); err == nil {
-		return "../../.lumaestro.json"
-	}
 	// Migração automática de config.json legado
 	if _, err := os.Stat("config.json"); err == nil && !strings.Contains(os.Getenv("WAILS_WASM"), "true") {
 		_ = os.Rename("config.json", ".lumaestro.json")
@@ -129,6 +126,9 @@ func Save(cfg Config) error {
 // Load recupera as configurações do arquivo JSON.
 func Load() (*Config, error) {
 	path := getConfigPath()
+	absPath, _ := filepath.Abs(path)
+	fmt.Printf("[Config] 📂 Carregando configuração de: %s\n", absPath)
+	
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Printf("[Config] Aviso: %s não encontrado no diretorio (%v)\n", path, err)

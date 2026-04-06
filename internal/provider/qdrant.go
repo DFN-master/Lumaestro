@@ -18,6 +18,10 @@ type QdrantClient struct {
 
 // NewQdrantClient inicializa o cliente com a URL e a chave de autenticação (Coolify).
 func NewQdrantClient(baseURL string, apiKey string) *QdrantClient {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		fmt.Println("[QDRANT] ⚠️ AVISO: URL do Qdrant está vazia! O sistema falhará ao conectar.")
+	}
 	return &QdrantClient{BaseURL: baseURL, APIKey: strings.TrimSpace(apiKey)}
 }
 

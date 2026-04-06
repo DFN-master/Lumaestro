@@ -299,7 +299,7 @@ const handleSelectDirectory = async () => {
     </div>
 
     <div class="tabs-nav-glass">
-      <button v-for="tab in ['geral', 'chaves', 'motores', 'contas', 'seguranca', 'mcp', 'repositórios']" 
+      <button v-for="tab in ['geral', 'qdrant', 'chaves', 'motores', 'contas', 'seguranca', 'mcp', 'repositórios']" 
               :key="tab"
               @click="activeTab = tab" 
               :class="{ 'active': activeTab === tab }" 
@@ -356,15 +356,9 @@ const handleSelectDirectory = async () => {
            </div>
         </div>
 
-        <div class="premium-form-group">
-          <label>URL do Qdrant Cloud</label>
-          <input v-model="config.qdrant_url" type="text" class="maestro-input" placeholder="https://..." />
-        </div>
 
-        <div class="premium-form-group">
-          <label>Qdrant API Key (Coolify)</label>
-          <input v-model="config.qdrant_api_key" type="password" class="maestro-input" placeholder="••••••••" />
-        </div>
+
+
 
         <button @click="save" class="btn-glow-blue">SALVAR ALTERAÇÕES GERAIS</button>
 
@@ -375,36 +369,24 @@ const handleSelectDirectory = async () => {
         </div>
       </section>
 
-      <!-- ABA CHAVES (INJEÇÃO DE CHAVES DIRETAS) -->
-      <section v-if="activeTab === 'chaves'" class="glass-panel animate-slide-up">
-        <h2 class="section-title">Chaves de API (Conexão Legada)</h2>
-        <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
-          Gerencie injeções diretas de tokens de acesso para execução em modo bypass em vez do sistema nativo OAuth.
+      <!-- ABA QDRANT (MEMÓRIA VETORIAL) -->
+      <section v-if="activeTab === 'qdrant'" class="glass-panel animate-slide-up">
+        <h2 class="section-title">Memória Vetorial (Qdrant)</h2>
+        <p class="subtitle-maestro" style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
+          Configure o banco de dados que armazena o conhecimento de longo prazo e as conexões semânticas da IA.
         </p>
         
         <div class="premium-form-group">
-          <label style="display: flex; align-items: center; justify-content: space-between;">
-            <span>Gemini API Keys (Pool de Failover)</span>
-            <span v-if="geminiKeyCount > 0" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; padding: 3px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 900; letter-spacing: 1px;">
-              {{ geminiKeyCount }} CHAVE{{ geminiKeyCount > 1 ? 'S' : '' }} 🔑
-            </span>
-          </label>
-          <textarea 
-            v-model="config.gemini_api_key" 
-            class="maestro-input" 
-            placeholder="AIzaSy...chave1, AIzaSy...chave2, AIzaSy...chave3"
-            rows="3"
-            style="resize: vertical; font-family: monospace; font-size: 0.85rem; line-height: 1.6;"
-          ></textarea>
-          <p style="color: var(--p-text-dim); font-size: 0.7rem; margin-top: 0.5rem; opacity: 0.7;">
-            💡 Separe múltiplas chaves por <b style="color: #3b82f6;">vírgula</b>. Se uma chave atingir o limite de quota, o sistema pula automaticamente para a próxima.
-          </p>
+          <label>URL do Qdrant Cloud (Instância)</label>
+          <input v-model="config.qdrant_url" type="text" class="maestro-input" placeholder="http://qdrant-seu-id.sslip.io" />
         </div>
 
         <div class="premium-form-group">
-          <label>Qdrant API Key (Climb/Coolify)</label>
+          <label>Qdrant API Key (Coolify)</label>
           <input v-model="config.qdrant_api_key" type="password" class="maestro-input" placeholder="••••••••" />
         </div>
+
+        <button @click="save" class="btn-glow-blue" style="width: 100%; margin-bottom: 1rem;">SALVAR CONFIGURAÇÃO VETORIAL</button>
 
         <!-- PAINEL DE DIAGNÓSTICO VETORIAL -->
         <div class="diagnostic-panel-premium glass-panel" style="margin-top: 2rem; border: 1px solid rgba(59, 130, 246, 0.2);">
@@ -447,6 +429,39 @@ const handleSelectDirectory = async () => {
             </div>
           </div>
         </div>
+
+        <div class="danger-zone-compact" style="margin-top: 2rem; padding: 1.5rem; border: 1px solid rgba(239, 68, 68, 0.1); border-radius: 12px; background: rgba(239, 68, 68, 0.02);">
+           <h3 style="color: #ef4444; font-size: 0.7rem; letter-spacing: 2px; margin-bottom: 0.5rem;">ZONA DE PURGA</h3>
+           <p style="color: var(--p-text-dim); font-size: 0.7rem; margin-bottom: 1rem;">Deseja apagar todos os vetores deste banco? Esta ação é irreversível.</p>
+           <button @click="showResetModal = true" class="btn-reset-db" style="padding: 10px 20px; font-size: 0.7rem;">RESETAR BANCO QDRANT</button>
+        </div>
+      </section>
+
+      <!-- ABA CHAVES (INJEÇÃO DE CHAVES DIRETAS) -->
+      <section v-if="activeTab === 'chaves'" class="glass-panel animate-slide-up">
+        <h2 class="section-title">Chaves de API (Conexão Legada)</h2>
+        <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
+          Gerencie injeções diretas de tokens de acesso para execução em modo bypass em vez do sistema nativo OAuth.
+        </p>
+        
+        <div class="premium-form-group">
+          <label style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Gemini API Keys (Pool de Failover)</span>
+            <span v-if="geminiKeyCount > 0" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; padding: 3px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 900; letter-spacing: 1px;">
+              {{ geminiKeyCount }} CHAVE{{ geminiKeyCount > 1 ? 'S' : '' }} 🔑
+            </span>
+          </label>
+          <textarea 
+            v-model="config.gemini_api_key" 
+            class="maestro-input" 
+            placeholder="AIzaSy...chave1, AIzaSy...chave2, AIzaSy...chave3"
+            rows="3"
+            style="resize: vertical; font-family: monospace; font-size: 0.85rem; line-height: 1.6;"
+          ></textarea>
+
+        </div>
+
+
 
         <div class="sec-card" style="margin-top: 2rem; margin-bottom: 2.5rem; padding: 1.5rem 2.5rem;">
            <div class="sec-info">
