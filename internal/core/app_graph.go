@@ -1,4 +1,4 @@
-﻿package core
+package core
 
 import (
 	"Lumaestro/internal/rag"
@@ -115,7 +115,7 @@ func (a *App) WeaveNeuralLinks(limit int) {
 		}
 
 		// 2. Usamos o embedding para encontrar vizinhos próximos
-		vector, err := a.embedder.GenerateEmbedding(a.ctx, content)
+		vector, err := a.embedder.GenerateEmbedding(a.ctx, content, false)
 		if err != nil {
 			continue
 		}

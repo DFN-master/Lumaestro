@@ -47,7 +47,7 @@ func (w *KnowledgeWeaver) WeaveChatKnowledge(ctx context.Context, sessionID stri
 
 	for _, t := range triples {
 		factText := fmt.Sprintf("%s %s %s", t.Subject, t.Predicate, t.Object)
-		vector, _ := w.Embedder.GenerateEmbedding(ctx, factText)
+		vector, _ := w.Embedder.GenerateEmbedding(ctx, factText, false)
 
 		// 2. DETECÇÃO DE CONFLITO: Busca se já sabemos algo sobre este (Sujeito, Predicado)
 		existing, _ := w.Qdrant.SearchByField("knowledge_graph", "subject", t.Subject)

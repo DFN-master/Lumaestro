@@ -75,7 +75,7 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		// para não travar o envio da mensagem por 30s.
 		fmt.Println("[RAG] Explorando ligações nervosas no Grafo de Conhecimento...")
 		
-		vector, err := a.embedder.GenerateEmbedding(a.ctx, input)
+		vector, err := a.embedder.GenerateEmbedding(a.ctx, input, true)
 		if err == nil {
 			// 1. Busca as notas âncoras (Top 3)
 			nodes, err := a.qdrant.Search("obsidian_knowledge", vector, 3)
@@ -138,7 +138,7 @@ func (a *App) ResolveConflict(decision string, subject string, predicate string,
 
 		// 2. Salvar o NOVO como ativo
 		factText := fmt.Sprintf("%s %s %s", subject, predicate, newValue)
-		vector, _ := a.crawler.Embedder.GenerateEmbedding(a.ctx, factText)
+		vector, _ := a.crawler.Embedder.GenerateEmbedding(a.ctx, factText, false)
 
 		h := fnv.New64a()
 		h.Write([]byte(factText + sessionID))

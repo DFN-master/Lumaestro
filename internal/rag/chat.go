@@ -60,7 +60,7 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 	now := time.Now().Format("15:04")
 	runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] 🔍 buscando '%s'...", now, question))
 	
-	vector, err := s.Embedder.GenerateEmbedding(ctx, question)
+	vector, err := s.Embedder.GenerateEmbedding(ctx, question, true)
 	if err != nil {
 		runtime.EventsEmit(s.ctx, "graph:log", fmt.Sprintf("[%s] ❌ Erro ao criar semântica.", now))
 		return "", err

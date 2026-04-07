@@ -1,4 +1,4 @@
-﻿package core
+package core
 
 import (
 	"Lumaestro/internal/config"
@@ -291,7 +291,7 @@ func (a *App) RunVectorDiagnostic() map[string]interface{} {
 	// 1. Teste de Embedding (Gemini)
 	testText := "Maestro Vector Test: Sincronização Semântica Atômica."
 	embedStart := time.Now()
-	vector, err := a.embedder.GenerateEmbedding(a.ctx, testText)
+	vector, err := a.embedder.GenerateEmbedding(a.ctx, testText, false)
 	embedDuration := time.Since(embedStart).Milliseconds()
 
 	if err != nil {

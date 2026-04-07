@@ -82,7 +82,7 @@ func (s *EmbeddingService) rotateAndRetry() bool {
 }
 
 // GenerateEmbedding transforma um texto em um vetor []float32.
-func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) ([]float32, error) {
+func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string, fastTrack bool) ([]float32, error) {
 	contents := []*genai.Content{
 		{
 			Parts: []*genai.Part{
@@ -91,11 +91,11 @@ func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) (
 		},
 	}
 
-	return s.embedWithRetry(ctx, contents)
+	return s.embedWithRetry(ctx, contents, fastTrack)
 }
 
 // GenerateMultimodalEmbedding transforma um binário (imagem, PDF, etc) em um vetor []float32.
-func (s *EmbeddingService) GenerateMultimodalEmbedding(ctx context.Context, data []byte, mimeType string) ([]float32, error) {
+func (s *EmbeddingService) GenerateMultimodalEmbedding(ctx context.Context, data []byte, mimeType string, fastTrack bool) ([]float32, error) {
 	contents := []*genai.Content{
 		{
 			Parts: []*genai.Part{
@@ -109,11 +109,11 @@ func (s *EmbeddingService) GenerateMultimodalEmbedding(ctx context.Context, data
 		},
 	}
 
-	return s.embedWithRetry(ctx, contents)
+	return s.embedWithRetry(ctx, contents, fastTrack)
 }
 
 // embedWithRetry é o motor central que realiza a chamada e gerencia a rotação de chaves com Throttle defensivo.
-func (s *EmbeddingService) embedWithRetry(ctx context.Context, contents []*genai.Content) ([]float32, error) {
+func (s *EmbeddingService) embedWithRetry(ctx context.Context, contents []*genai.Content, fastTrack bool) ([]float32, error) {
 	model := "gemini-embedding-2-preview"
 
 	for {
@@ -158,6 +158,11 @@ func (s *EmbeddingService) embedWithRetry(ctx context.Context, contents []*genai
 				return res.Embeddings[0].Values, nil
 			}
 			return nil, fmt.Errorf("vetor de embedding vazio na resposta")
+		}
+
+		// Fast-Track: Se todas as chaves falharam e estamos em modo fastTrack (Chat), abortamos imediatamente sem hibernar.
+		if fastTrack {
+			return nil, fmt.Errorf("quota_exhausted: todas as chaves exaustas (fast-track)")
 		}
 
 		// Throttle Defensivo: Quando todas as N chaves falham de cota, em vez de pular o arquivo e abortar,

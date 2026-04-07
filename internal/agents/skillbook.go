@@ -21,7 +21,7 @@ func NewSkillbook(qdrant *provider.QdrantClient, embedder *provider.EmbeddingSer
 // SaveSkill salva uma nova estratégia no Qdrant.
 func (s *Skillbook) SaveSkill(ctx context.Context, description string) error {
 	// 1. Gerar vetor da estratégia
-	vector, err := s.Embedder.GenerateEmbedding(ctx, description)
+	vector, err := s.Embedder.GenerateEmbedding(ctx, description, false)
 	if err != nil {
 		return err
 	}
