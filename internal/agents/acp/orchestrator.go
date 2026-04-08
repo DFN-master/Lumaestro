@@ -75,7 +75,7 @@ func (o *Orchestrator) Execute(ctx context.Context, sessionID string, goal strin
 	o.mu.RUnlock()
 
 	// 3. Construir o Prompt com RAG + Histórico
-	finalPrompt := o.builder.Build(profile, contextData, history, goal)
+	finalPrompt := o.builder.Build(profile, contextData, history, goal, o.executor.AutonomousMode)
 
 	// 4. Execução via ACP (Modo YOLO incluído no executor)
 	// Como o AskAgent em app.go já gerencia a sessão, injetamos a pergunta.
