@@ -15,6 +15,7 @@ tmp/
 
 # 📊 Banco de Dados Local (DuckDB / SQLite / Cache)
 .lumaestro/
+.lumaestro/parallel-memory.json
 .lumaestro.json
 .context/
 *.db
