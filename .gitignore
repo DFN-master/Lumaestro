@@ -20,3 +20,22 @@ tmp/
 *.db
 *.db-journal
 *.db.wal
+
+# 🔐 Segredos e Credenciais Locais
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*secret*.json
+*secrets*.json
+*token*.json
+*credential*.json
+
+# 🧪 Artefatos de Runtime Local
+qdrant_storage/
+debug_stderr.log

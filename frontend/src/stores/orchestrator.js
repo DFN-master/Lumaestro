@@ -28,7 +28,28 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const activeAgent = ref(null);
   const activeProfile = ref(null); // 🎭 Perfil de Agente (Doc-Master, etc) - Começa limpo
   const currentStatus = ref(""); // 📡 Status de Ação em Tempo Real
+  const currentStatusKind = ref('status');
+  const statusTimeline = ref([]); // 🪟 Janela de atividade (histórico curto)
+  const statusFilter = ref('all');
   const runningSessions = ref([]);
+
+  const pushStatus = (text, kind = 'status') => {
+    const line = String(text || '').trim();
+    if (!line) return;
+    statusTimeline.value.push({
+      id: Date.now() + Math.random(),
+      text: line,
+      kind,
+      at: new Date().toLocaleTimeString('pt-BR', { hour12: false })
+    });
+    if (statusTimeline.value.length > 40) {
+      statusTimeline.value = statusTimeline.value.slice(-40);
+    }
+  };
+
+  const clearStatusTimeline = () => {
+    statusTimeline.value = [];
+  };
   
   // Estado para histórico e checkpoints (Sinfonias)
   const sessions = ref([]);
@@ -80,6 +101,13 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       const content = log.content || log.Content || "";
       const source = log.source || log.Source || "Gemini";
       const type = log.type || log.Type || "message";
+
+      if (type === 'thought') {
+        pushStatus(content, 'think');
+      }
+      if (source === 'ERROR') {
+        pushStatus(content, 'error');
+      }
 
       // TRATAMENTO DE SISTEMA
       if (source === 'SYSTEM' || source === 'ERROR' || source === 'CRAWLER') {
@@ -162,6 +190,17 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
     EventsOn('agent:status', (s) => {
       console.log("[Store] 🛠️ Status da IA:", s);
       currentStatus.value = s.action || "";
+      currentStatusKind.value = s.kind || 'status';
+      const action = String(s.action || 'Atualizando estado do agente...');
+      let kind = s.kind || 'status';
+      if (kind === 'status') {
+        const lowered = action.toLowerCase();
+        if (lowered.includes('ferramenta') || lowered.includes('tool')) kind = 'tool';
+        if (lowered.includes('comando') || lowered.includes('cmd ') || lowered.includes('powershell') || lowered.includes('bash')) kind = 'command';
+        if (lowered.includes('erro') || lowered.includes('falha')) kind = 'error';
+        if (lowered.includes('memória') || lowered.includes('memoria') || lowered.includes('grafo') || lowered.includes('contexto')) kind = 'memory';
+      }
+      pushStatus(action, kind);
       isThinking.value = true;
     });
 
@@ -170,7 +209,11 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias e Consolidando Memória...`);
       stopSafetyTimeout(); // 🛑 Turno finalizado, para o cronômetro
       isThinking.value = false;
+      if (currentStatus.value) {
+        pushStatus(`Concluído: ${currentStatus.value}`, 'status');
+      }
       currentStatus.value = ""; // 🧹 Limpa o status ao terminar
+      currentStatusKind.value = 'status';
       fetchSessions(agent);
 
       // Consolidação de Conhecimento RAG em tempo real
@@ -346,8 +389,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
 
   return {
     messages, isThinking, isTerminalMode, activeAgent, runningSessions, pendingReview,
-    sessions, currentACPID, isSidebarOpen,
+    sessions, currentACPID, isSidebarOpen, currentStatus, currentStatusKind, statusTimeline, statusFilter,
     initListeners, ask, startSession, sendInput, submitReview, switchAgent, stopSession,
-    fetchSessions, loadSession, newSession, toggleSidebar
+    fetchSessions, loadSession, newSession, toggleSidebar, clearStatusTimeline
   };
 });

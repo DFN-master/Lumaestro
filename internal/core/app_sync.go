@@ -134,7 +134,7 @@ func (a *App) ResetQdrantDB() string {
 	}
 
 	fmt.Println("[RESET] 🚨 Iniciando Reset do Banco de Dados Qdrant...")
-	
+
 	collections := []string{"obsidian_knowledge", "knowledge_graph"}
 	for _, name := range collections {
 		err := a.qdrant.DeleteCollection(name)
@@ -209,7 +209,7 @@ func (a *App) SyncAllNodes() {
 	if cachedBatch != nil && len(cachedBatch) > 0 {
 		fmt.Printf("[Sync] ⚡ Carregando %d nós instantaneamente via Fast Topology Cache (0 delay de infraestrutura)...\n", len(cachedBatch))
 		runtime.EventsEmit(a.ctx, "graph:nodes:batch", cachedBatch)
-		
+
 		go func() {
 			time.Sleep(500 * time.Millisecond) // Pequeno respiro para o motor físico
 			stats, _ := a.AnalyzeGraphHealth()
@@ -225,7 +225,25 @@ func (a *App) SyncAllNodes() {
 		fmt.Printf("[Sync] Erro ao buscar nós para sincronização: %v\n", err)
 		return
 	}
+	memoryPoints, err := a.qdrant.Search("knowledge_graph", nil, 1500)
+	if err != nil {
+		fmt.Printf("[Sync] Erro ao buscar memórias para sincronização: %v\n", err)
+	}
+
 	var batch []map[string]interface{}
+	batchIndex := map[string]struct{}{}
+	addNode := func(node map[string]interface{}) {
+		id, _ := node["id"].(string)
+		if id == "" {
+			return
+		}
+		if _, exists := batchIndex[id]; exists {
+			return
+		}
+		batchIndex[id] = struct{}{}
+		batch = append(batch, node)
+	}
+
 	for _, p := range points {
 		name, _ := p["name"].(string)
 		if name == "" {
@@ -233,7 +251,7 @@ func (a *App) SyncAllNodes() {
 		}
 
 		nodeID := strings.ToLower(name)
-		
+
 		nodeData := map[string]interface{}{
 			"id":            nodeID,
 			"name":          name,
@@ -245,15 +263,45 @@ func (a *App) SyncAllNodes() {
 			nodeData["pagerank"] = a.GEngine.GetRank(nodeID)
 			nodeData["community"] = a.GEngine.GetCommunity(nodeID)
 			nodeData["betweenness"] = a.GEngine.GetBetweenness(nodeID)
-			
+
 			h, auth := a.GEngine.GetHITS(nodeID)
 			nodeData["hub"] = h
 			nodeData["authority"] = auth
 		}
 
-		batch = append(batch, nodeData)
+		addNode(nodeData)
 	}
-	
+
+	for _, p := range memoryPoints {
+		subject, _ := p["subject"].(string)
+		object, _ := p["object"].(string)
+		sessionID, _ := p["session_id"].(string)
+
+		if subject != "" {
+			addNode(map[string]interface{}{
+				"id":            subject,
+				"name":          subject,
+				"document-type": "memory",
+				"session-id":    sessionID,
+			})
+		}
+		if object != "" {
+			addNode(map[string]interface{}{
+				"id":            object,
+				"name":          object,
+				"document-type": "memory",
+				"session-id":    sessionID,
+			})
+		}
+		if subject != "" && object != "" {
+			runtime.EventsEmit(a.ctx, "graph:edge", map[string]interface{}{
+				"source": subject,
+				"target": object,
+				"weight": 1,
+			})
+		}
+	}
+
 	// Grava o Cache novinho em folha
 	a.saveTopologyCache(batch)
 

@@ -94,6 +94,8 @@ export function IsExplorationMode():Promise<boolean>;
 
 export function ListAgentSessions(arg1:string):Promise<Array<acp.SessionInfo>>;
 
+export function ListLMStudioModels():Promise<Array<string>>;
+
 export function ListMCPServers():Promise<string>;
 
 export function LoadAgentSession(arg1:string,arg2:string):Promise<void>;
@@ -153,6 +155,8 @@ export function SubmitReview(arg1:string,arg2:boolean):Promise<void>;
 export function SwitchGeminiAccount(arg1:string):Promise<void>;
 
 export function SyncAllNodes():Promise<void>;
+
+export function TestLMStudioModel(arg1:string,arg2:string):Promise<Record<string, any>>;
 
 export function TriggerReflection(arg1:string):Promise<string>;
 

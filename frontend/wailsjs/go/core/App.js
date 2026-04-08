@@ -178,6 +178,10 @@ export function ListAgentSessions(arg1) {
   return window['go']['core']['App']['ListAgentSessions'](arg1);
 }
 
+export function ListLMStudioModels() {
+  return window['go']['core']['App']['ListLMStudioModels']();
+}
+
 export function ListMCPServers() {
   return window['go']['core']['App']['ListMCPServers']();
 }
@@ -296,6 +300,10 @@ export function SwitchGeminiAccount(arg1) {
 
 export function SyncAllNodes() {
   return window['go']['core']['App']['SyncAllNodes']();
+}
+
+export function TestLMStudioModel(arg1, arg2) {
+  return window['go']['core']['App']['TestLMStudioModel'](arg1, arg2);
 }
 
 export function TriggerReflection(arg1) {

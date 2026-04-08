@@ -10,14 +10,14 @@ import (
 
 // SecurityConfig define as permissões granulares para a IA
 type SecurityConfig struct {
-	AllowRead        bool     `json:"allow_read"`
-	AllowWrite       bool     `json:"allow_write"`
-	AllowCreate      bool     `json:"allow_create"`
-	AllowDelete      bool     `json:"allow_delete"`
-	AllowMove        bool     `json:"allow_move"`
-	AllowRunCommands bool     `json:"allow_run_commands"`
+	AllowRead         bool     `json:"allow_read"`
+	AllowWrite        bool     `json:"allow_write"`
+	AllowCreate       bool     `json:"allow_create"`
+	AllowDelete       bool     `json:"allow_delete"`
+	AllowMove         bool     `json:"allow_move"`
+	AllowRunCommands  bool     `json:"allow_run_commands"`
 	FullMachineAccess bool     `json:"full_machine_access"` // Se falso, restringe aos Workspaces
-	Workspaces       []string `json:"workspaces"`          // Lista de pastas autorizadas (Whitelist)
+	Workspaces        []string `json:"workspaces"`          // Lista de pastas autorizadas (Whitelist)
 }
 
 // GeminiAccount representa um perfil de login do Gemini
@@ -31,34 +31,39 @@ type GeminiAccount struct {
 // ProjectScan mapeia uma pasta que serve como repositório secundário (satélite/aglomerado)
 type ProjectScan struct {
 	Path        string `json:"path"`
-	CoreNode    string `json:"core_node"` // Nó raíz radial (ex: MóduloAuth, Gesttik)
+	CoreNode    string `json:"core_node"`    // Nó raíz radial (ex: MóduloAuth, Gesttik)
 	IncludeCode bool   `json:"include_code"` // Se true, o Code RAG roda em todo o source no diretório
 }
 
 // Config representa as configurações globais do orquestrador.
 type Config struct {
-	ObsidianVaultPath string         `json:"obsidian_vault_path"`
-	QdrantURL         string         `json:"qdrant_url"`
-	QdrantAPIKey      string         `json:"qdrant_api_key"`
-	GeminiAPIKey      string         `json:"gemini_api_key"` // Aceita múltiplas chaves separadas por vírgula
-	UseGeminiAPIKey   bool           `json:"use_gemini_api_key"`
-	GeminiKeyIndex    int            `json:"gemini_key_index"` // Índice da chave ativa no pool
-	GeminiAccounts    []GeminiAccount `json:"gemini_accounts"` // 🌟 Nova lista de contas
-	ClaudeAPIKey      string         `json:"claude_api_key"`
-	UseClaudeAPIKey   bool           `json:"use_claude_api_key"`
-	ActiveAgent       string         `json:"active_agent"`
-	AutoStartAgents   []string       `json:"auto_start_agents"`
-	AgentLanguage     string         `json:"agent_language"`
-	MaxConcurrentAgents int          `json:"max_concurrent_agents"` // 🌟 Limite de Enxame (Swarm)
-	ExternalProjects  []ProjectScan `json:"external_projects"` // 🌟 Repositórios e Aglomerados Code RAG
-	GraphDepth        int            `json:"graph_depth"`         // Profundidade de navegação de links (padrão: 1)
-	GraphNeighborLimit int            `json:"graph_neighbor_limit"` // Máximo de vizinhos por nó (padrão: 5)
-	GraphContextLimit int            `json:"graph_context_limit"` // Limite de chars do contexto expandido (padrão: 4000)
-	Security          SecurityConfig `json:"security"`
-	
+	ObsidianVaultPath   string          `json:"obsidian_vault_path"`
+	QdrantURL           string          `json:"qdrant_url"`
+	QdrantAPIKey        string          `json:"qdrant_api_key"`
+	GeminiAPIKey        string          `json:"gemini_api_key"` // Aceita múltiplas chaves separadas por vírgula
+	UseGeminiAPIKey     bool            `json:"use_gemini_api_key"`
+	GeminiKeyIndex      int             `json:"gemini_key_index"` // Índice da chave ativa no pool
+	GeminiAccounts      []GeminiAccount `json:"gemini_accounts"`  // 🌟 Nova lista de contas
+	ClaudeAPIKey        string          `json:"claude_api_key"`
+	UseClaudeAPIKey     bool            `json:"use_claude_api_key"`
+	ActiveAgent         string          `json:"active_agent"`
+	AutoStartAgents     []string        `json:"auto_start_agents"`
+	AgentLanguage       string          `json:"agent_language"`
+	MaxConcurrentAgents int             `json:"max_concurrent_agents"` // 🌟 Limite de Enxame (Swarm)
+	ExternalProjects    []ProjectScan   `json:"external_projects"`     // 🌟 Repositórios e Aglomerados Code RAG
+	GraphDepth          int             `json:"graph_depth"`           // Profundidade de navegação de links (padrão: 1)
+	GraphNeighborLimit  int             `json:"graph_neighbor_limit"`  // Máximo de vizinhos por nó (padrão: 5)
+	GraphContextLimit   int             `json:"graph_context_limit"`   // Limite de chars do contexto expandido (padrão: 4000)
+	Security            SecurityConfig  `json:"security"`
+
 	// ⚡ Configurações do Motor Lightning (Aprendizado por Reforço)
 	LightningEnabled   bool   `json:"lightning_enabled"`    // Ativa o rastreamento e aprendizado
 	LightningProxyPort string `json:"lightning_proxy_port"` // Porta do proxy local (padrão: 8001)
+
+	// 🤖 LM Studio (Motor Local OpenAI-Compatível)
+	LMStudioURL     string `json:"lmstudio_url"`     // URL base do servidor LM Studio (ex: http://localhost:1234)
+	LMStudioModel   string `json:"lmstudio_model"`   // ID do modelo carregado no LM Studio
+	LMStudioEnabled bool   `json:"lmstudio_enabled"` // Habilita o LM Studio como motor de IA
 }
 
 // GetGeminiKeys retorna a lista de chaves API do Gemini (split por vírgula).
@@ -126,10 +131,10 @@ func Save(cfg Config) error {
 // Load recupera as configurações do arquivo JSON com resiliência a Race Conditions.
 func Load() (*Config, error) {
 	path := getConfigPath()
-	
+
 	var data []byte
 	var err error
-	
+
 	// 🔄 Retry Loop: Tenta ler até 3 vezes com pequeno delay se o arquivo estiver vazio/corrompido
 	// Isso evita o erro 'unexpected end of JSON input' durante o Save() simultâneo.
 	for i := 0; i < 3; i++ {

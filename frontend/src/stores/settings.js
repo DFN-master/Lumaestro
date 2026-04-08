@@ -29,7 +29,11 @@ export const useSettingsStore = defineStore('settings', () => {
       allow_move: false,
       allow_run_commands: false,
       full_machine_access: false
-    }
+    },
+    // LM Studio (Motor Local)
+    lmstudio_url: 'http://localhost:1234',
+    lmstudio_model: '',
+    lmstudio_enabled: false,
   })
 
   // ── Status de Ferramentas ──
@@ -78,6 +82,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const includeCodeToggle = ref(false)
   const repoStatusMsg = ref('')
 
+  // ── LM Studio ──
+  const lmModels = ref([])
+  const lmTesting = ref(false)
+  const lmTestResult = ref(null)
+  const lmLoadingModels = ref(false)
+
   // ── Computed ──
   const geminiKeyCount = computed(() => {
     const raw = (config.value.gemini_api_key || '').trim()
@@ -95,6 +105,7 @@ export const useSettingsStore = defineStore('settings', () => {
     mcpName, mcpCommand, mcpServers, showMcpList,
     newAccName,
     repoPathInput, coreNodeInput, includeCodeToggle, repoStatusMsg,
+    lmModels, lmTesting, lmTestResult, lmLoadingModels,
     geminiKeyCount
   }
 })

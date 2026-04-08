@@ -44,17 +44,20 @@ type App struct {
 	installer    *tools.Installer
 	config       *config.Config
 	muInit       sync.Mutex // 🔒 Trava de Segurança contra inicialização dupla (HMR/Wails)
-	
+
 	// ⚡ Motores de Elite (Lightning)
-	LStore       *lightning.DuckDBStore
-	LReflector   *lightning.Reflector
-	LOptimizer   *lightning.Optimizer
-	LRouter      *lightning.LLMRouter
+	LStore     *lightning.DuckDBStore
+	LReflector *lightning.Reflector
+	LOptimizer *lightning.Optimizer
+	LRouter    *lightning.LLMRouter
 
 	// 🧠 Cérebro Relacional (V20, V22, V23)
-	GEngine      *rag.GraphEngine
-	Validator    *rag.AgentValidator
-	Recon        *rag.AgentRecon
+	GEngine   *rag.GraphEngine
+	Validator *rag.AgentValidator
+	Recon     *rag.AgentRecon
+
+	// 🤖 LM Studio (Motor Local)
+	lmStudio *provider.LMStudioClient
 }
 
 // NewApp cria uma nova instância soberana do Lumaestro.
@@ -87,7 +90,7 @@ func (a *App) Startup(ctx context.Context) {
 	}
 
 	a.ctx = ctx
-	
+
 	// Sincroniza o PATH imediatamente (Garante que claude/gemini sejam encontrados)
 	a.installer.SyncPath()
 
@@ -98,7 +101,7 @@ func (a *App) Startup(ctx context.Context) {
 
 	// 🚀 Boot Assíncrono: Garante que o WebView esteja pronto antes de emitir eventos
 	go a.bootSequence()
-	
+
 	// 🧠 Córtex Autônomo (APO): Monitora falhas e otimiza prompts em background
 	go a.startAPOWorker()
 }
@@ -112,7 +115,7 @@ func (a *App) bootSequence() {
 
 	if err := a.initServices(); err != nil {
 		fmt.Printf("🔴 PANICO SILENCIOSO do Backend no initServices: %v\n", err)
-		a.emitBoot("error", "🔴", "Falha na inicialização: " + err.Error())
+		a.emitBoot("error", "🔴", "Falha na inicialização: "+err.Error())
 		return
 	}
 
@@ -120,12 +123,14 @@ func (a *App) bootSequence() {
 	a.injectContexts()
 
 	// 🚀 Auto-Start: Inicia os agentes e sincroniza conhecimento
-	if a.config != nil && a.config.GetActiveGeminiKey() != "" {
+	if a.config != nil {
 		fmt.Println("[BOOT] Maestro Online. Sincronizando conhecimento e restaurando agentes...")
-		
-		if len(a.config.AutoStartAgents) > 0 {
-			a.emitBoot("agent", "🤖", "Iniciando agente " + a.config.AutoStartAgents[0] + "...")
-			a.StartAgentSession(a.config.AutoStartAgents[0])
+
+		for _, agent := range a.config.AutoStartAgents {
+			a.emitBoot("agent", "🤖", "Iniciando agente "+agent+"...")
+			if err := a.StartAgentSession(agent); err != nil {
+				fmt.Printf("[BOOT] Falha ao iniciar agente %s: %v\n", agent, err)
+			}
 		}
 
 		if a.crawler != nil && a.config.ObsidianVaultPath != "" {
@@ -135,7 +140,7 @@ func (a *App) bootSequence() {
 				a.emitBoot("complete", "✅", "Sincronização concluída.")
 			}()
 		}
-		
+
 		go a.startOrchestration()
 	}
 }
@@ -145,7 +150,20 @@ func (a *App) initServices() error {
 	a.muInit.Lock()
 	defer a.muInit.Unlock()
 
-	if a.crawler != nil { return nil }
+	// ─── LM Studio (sempre atualizado, independente dos outros motores) ───
+	cfg0, _ := config.Load()
+	if cfg0 != nil {
+		if cfg0.LMStudioEnabled && cfg0.LMStudioURL != "" {
+			a.lmStudio = provider.NewLMStudioClient(cfg0.LMStudioURL)
+			fmt.Printf("[LMStudio] ✅ Cliente inicializado → %s\n", cfg0.LMStudioURL)
+		} else {
+			a.lmStudio = nil
+		}
+	}
+
+	if a.crawler != nil {
+		return nil
+	}
 
 	cfg, err := config.Load()
 	if err != nil || cfg == nil {
@@ -187,8 +205,12 @@ func (a *App) initServices() error {
 	if a.LStore != nil {
 		nodes, edges, err := a.LStore.GetFullGraph()
 		if err == nil {
-			for _, n := range nodes { a.GEngine.AddNode(n["id"].(string), n["name"].(string), n["type"].(string)) }
-			for _, e := range edges { a.GEngine.AddEdge(e["source"].(string), e["target"].(string), e["weight"].(float64), e["relation_type"].(string)) }
+			for _, n := range nodes {
+				a.GEngine.AddNode(n["id"].(string), n["name"].(string), n["type"].(string))
+			}
+			for _, e := range edges {
+				a.GEngine.AddEdge(e["source"].(string), e["target"].(string), e["weight"].(float64), e["relation_type"].(string))
+			}
 			a.GEngine.ComputePageRank()
 		}
 	}
@@ -207,18 +229,44 @@ func (a *App) initServices() error {
 	return nil
 }
 
+// resetServicesForReload anula todos os serviços dependentes de config para forçar
+// re-inicialização completa na próxima chamada a initServices.
+func (a *App) resetServicesForReload() {
+	a.muInit.Lock()
+	defer a.muInit.Unlock()
+	a.crawler = nil
+	a.qdrant = nil
+	a.embedder = nil
+	a.chat = nil
+	a.weaver = nil
+	a.navigator = nil
+	a.lmStudio = nil
+}
+
 // injectContexts garante que todos os motores de RAG tenham o contexto oficial.
 func (a *App) injectContexts() {
-	if a.ctx == nil { return }
-	if a.crawler != nil { a.crawler.SetContext(a.ctx) }
-	if a.weaver != nil { a.weaver.SetContext(a.ctx) }
-	if a.navigator != nil { a.navigator.SetContext(a.ctx) }
-	if a.chat != nil { a.chat.SetContext(a.ctx) }
+	if a.ctx == nil {
+		return
+	}
+	if a.crawler != nil {
+		a.crawler.SetContext(a.ctx)
+	}
+	if a.weaver != nil {
+		a.weaver.SetContext(a.ctx)
+	}
+	if a.navigator != nil {
+		a.navigator.SetContext(a.ctx)
+	}
+	if a.chat != nil {
+		a.chat.SetContext(a.ctx)
+	}
 }
 
 // emitBoot envia um evento de diagnóstico de boot para o frontend. (DNA 1:1)
 func (a *App) emitBoot(stage string, icon string, message string) {
-	if a.ctx == nil { return }
+	if a.ctx == nil {
+		return
+	}
 	runtime.EventsEmit(a.ctx, "boot:stage", map[string]string{
 		"stage": stage, "icon": icon, "message": message,
 	})
@@ -247,7 +295,7 @@ func (a *App) listenForTerminalOutput() {
 		}
 		encoded := base64.StdEncoding.EncodeToString(td.Data)
 		runtime.EventsEmit(a.ctx, "terminal:output", map[string]string{
-			"agent": td.Agent, "data":  encoded,
+			"agent": td.Agent, "data": encoded,
 		})
 	}
 }
@@ -294,7 +342,9 @@ func checkRogueMainFiles() {
 		fmt.Println("║  Os seguintes arquivos contêm 'package main' em subpastas:   ║")
 		fmt.Println("║  Isso QUEBRA o 'wails dev' silenciosamente!                  ║")
 		fmt.Println("╠═══════════════════════════════════════════════════════════════════╣")
-		for _, f := range rogueFiles { fmt.Printf("║  🔴 %s\n", f) }
+		for _, f := range rogueFiles {
+			fmt.Printf("║  🔴 %s\n", f)
+		}
 		fmt.Println("╠═══════════════════════════════════════════════════════════════════╣")
 		fmt.Println("║  SOLUÇÃO: Delete ou mova esses arquivos para fora do projeto ║")
 		fmt.Println("╚═══════════════════════════════════════════════════════════════════╝")
@@ -302,7 +352,7 @@ func checkRogueMainFiles() {
 	}
 }
 
-/* 
+/*
    ============================================================
    LUMAESTRO COGNITIVE ENGINE V25 - [BUILD SUCCESSFUL]
    ARCHITECTURE: MODULAR HUB-AND-SPOKE
@@ -315,8 +365,8 @@ func checkRogueMainFiles() {
 // garantindo que a inteligência artificial reconheça a estrutura
 // como o Córtex Primário do Lumaestro v25.
 
-// 🧩 SINAPSE DE ARQUITETURA: O Hub Central orquestra as chamadas 
-// para os módulos especialistas, mantendo a coerência semântica 
+// 🧩 SINAPSE DE ARQUITETURA: O Hub Central orquestra as chamadas
+// para os módulos especialistas, mantendo a coerência semântica
 // entre o Obsidian (Memória de Longo Prazo) e o Swarm (Ação).
 
 // 🧩 SINAPSE DE SEGURANÇA: O Modo YOLO é controlado via executor.AutonomousMode,
@@ -329,6 +379,5 @@ func checkRogueMainFiles() {
 // Iniciando injeção de preenchimento estrutural para fidelidade...
 
 // ...
-// [O restante das linhas de preenchimento técnico e molduras ASCII 
+// [O restante das linhas de preenchimento técnico e molduras ASCII
 //  exatamente como no monólito original serão injetadas para bater a conta]
-

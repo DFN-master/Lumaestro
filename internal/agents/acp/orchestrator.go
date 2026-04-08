@@ -11,7 +11,7 @@ import (
 type Orchestrator struct {
 	executor *ACPExecutor
 	builder  *PromptBuilder
-	
+
 	// Cache de Memória: Histórico de conversas por sessão
 	// [NÍVEL PRO]: No futuro, isso pode ser movido para Redis ou Qdrant.
 	sessionCache map[string][]string
@@ -29,6 +29,15 @@ func NewOrchestrator(executor *ACPExecutor) *Orchestrator {
 // SelectAgent decide o perfil do agente baseado no objetivo (Goal).
 func (o *Orchestrator) SelectAgent(goal string) (string, AgentProfile) {
 	g := strings.ToLower(goal)
+
+	// ⚡ Preferência Local (LM Studio)
+	// Se o usuário quer privacidade ou execução offline, prioriza LM Studio.
+	localTerms := []string{"privado", "privada", "local", "offline", "sem internet", "lm studio", "llama", "mistral"}
+	for _, term := range localTerms {
+		if strings.Contains(g, term) {
+			return "lmstudio", ProfilePlanner // Retorna LM Studio para consultas privadas
+		}
+	}
 
 	// ⚡ Seleção de Documentação (Doc-Master)
 	// Ativado para explicar código, documentar sistemas ou dúvidas sobre conhecimento.
@@ -49,7 +58,7 @@ func (o *Orchestrator) SelectAgent(goal string) (string, AgentProfile) {
 			return "claude", ProfileCoder
 		}
 	}
-	
+
 	// Default: Planner (Gemini) - Excelente para ideias e navegação de conhecimento
 	return "gemini", ProfilePlanner
 }
@@ -70,15 +79,15 @@ func (o *Orchestrator) Execute(ctx context.Context, sessionID string, goal strin
 
 	// 4. Execução via ACP (Modo YOLO incluído no executor)
 	// Como o AskAgent em app.go já gerencia a sessão, injetamos a pergunta.
-	
-	return agentName, finalPrompt, profile, nil 
+
+	return agentName, finalPrompt, profile, nil
 }
 
 // AddToHistory adiciona uma mensagem ao cache de memória da sessão.
 func (o *Orchestrator) AddToHistory(sessionID string, message string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	
+
 	// Limitar o histórico para as últimas 10 interações (evitar estouro de contexto)
 	h := o.sessionCache[sessionID]
 	if len(h) > 10 {

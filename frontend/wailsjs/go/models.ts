@@ -108,6 +108,9 @@ export namespace config {
 	    security: SecurityConfig;
 	    lightning_enabled: boolean;
 	    lightning_proxy_port: string;
+	    lmstudio_url: string;
+	    lmstudio_model: string;
+	    lmstudio_enabled: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -135,6 +138,9 @@ export namespace config {
 	        this.security = this.convertValues(source["security"], SecurityConfig);
 	        this.lightning_enabled = source["lightning_enabled"];
 	        this.lightning_proxy_port = source["lightning_proxy_port"];
+	        this.lmstudio_url = source["lmstudio_url"];
+	        this.lmstudio_model = source["lmstudio_model"];
+	        this.lmstudio_enabled = source["lmstudio_enabled"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

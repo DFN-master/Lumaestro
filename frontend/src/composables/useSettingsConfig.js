@@ -70,11 +70,20 @@ export function useSettingsConfig() {
       store.config.auto_start_agents = []
     }
     const idx = store.config.auto_start_agents.indexOf(agent)
+    let enabled = false
     if (idx >= 0) {
       store.config.auto_start_agents.splice(idx, 1)
+      enabled = false
     } else {
       store.config.auto_start_agents.push(agent)
+      enabled = true
     }
+
+    // LM Studio usa o mesmo toggle para definir ativação do motor.
+    if (agent === 'lmstudio') {
+      store.config.lmstudio_enabled = enabled
+    }
+
     await SaveConfig(store.config)
   }
 
