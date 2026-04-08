@@ -26,6 +26,8 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
   const isNavigating = ref(false); // 🔍 Inteligência de Navegação em Tempo Real
   const isTerminalMode = ref(false);
   const activeAgent = ref(null);
+  const activeProfile = ref(null); // 🎭 Perfil de Agente (Doc-Master, etc) - Começa limpo
+  const currentStatus = ref(""); // 📡 Status de Ação em Tempo Real
   const runningSessions = ref([]);
   
   // Estado para histórico e checkpoints (Sinfonias)
@@ -150,11 +152,25 @@ export const useOrchestratorStore = defineStore('orchestrator', () => {
       await safeCall('main', 'SetupTool', agent);
     });
 
+    // 3.5 Identidade e Status (Maestro UI Evolution)
+    EventsOn('agent:profile', (p) => {
+      console.log("[Store] 🎭 Identidade assumida:", p);
+      activeProfile.value = p;
+    });
+
+    // 📡 Status de Atividade: Mostra o que a IA está fazendo AGORA (ex: lendo arquivo)
+    EventsOn('agent:status', (s) => {
+      console.log("[Store] 🛠️ Status da IA:", s);
+      currentStatus.value = s.action || "";
+      isThinking.value = true;
+    });
+
     // 🚀 Sincronização de Sinfonias (Checkpoints): Quando o turno termina, atualizamos a lista lateral e consolidamos a memória
     window.runtime.EventsOn("agent:turn_complete", async (agent) => {
       console.log(`[Store] Turno concluído para ${agent}. Atualizando Sinfonias e Consolidando Memória...`);
       stopSafetyTimeout(); // 🛑 Turno finalizado, para o cronômetro
       isThinking.value = false;
+      currentStatus.value = ""; // 🧹 Limpa o status ao terminar
       fetchSessions(agent);
 
       // Consolidação de Conhecimento RAG em tempo real

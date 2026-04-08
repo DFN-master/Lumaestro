@@ -94,15 +94,22 @@ func (a *App) SendAgentInput(agent string, input string, images []map[string]str
 		}
 	}
 
-	// Diretiva Técnica Dinâmica: Força o idioma em todos os canais (Resposta e Raciocínio).
-	directive := fmt.Sprintf("\n\n[SYSTEM DIRECTIVE: You MUST think, reason, and respond exclusively in %s. This applies to your 'Thought Channel' and your final response. DO NOT use English for internal reasoning.]", lang)
+	// 🧠 Orquestração Soberana: Decide o Agente e monta o Prompt Contextual (RAG + Skills)
+	agentName, finalPrompt, profile, err := a.orchestrator.Execute(a.ctx, "default", input, contextInfo)
+	if err != nil {
+		fmt.Printf("[App] ERRO na Orquestração: %v\n", err)
+		return fmt.Errorf("falha ao orquestrar sinfonia: %v", err)
+	}
 
-	// A Sinfonia Final: Contexto + Input + Diretiva
-	enhancedInput := contextInfo + "\n\nMENSAGEM DO USUÁRIO:\n" + input + directive
+	// 📡 Identidade Visual: Avisa o Frontend qual Perfil assumiu a palavra
+	fmt.Printf("[App] 🎭 Identidade Visual EMITIDA: %s (%s)\n", profile.Name, agentName)
+	runtime.EventsEmit(a.ctx, "agent:profile", map[string]string{
+		"name":   profile.Name,
+		"engine": agentName,
+	})
 
-	// 🚨 CORREÇÃO DE ID: Usar o nome do agente diretamente, sem o prefixo 'acp-session-'
-	// O ACPExecutor registra as sessões usando o nome do agente (ex: 'gemini')
-	err := a.executor.SendInput(agent, enhancedInput, images)
+	// 🚀 Disparo ACP via Protocolo ndJSON
+	err = a.executor.SendInput(agentName, finalPrompt, images)
 	if err != nil {
 		fmt.Printf("[App] ERRO no SendAgentInput: %v\n", err)
 		return fmt.Errorf("erro ao enviar input para ACP: %v", err)

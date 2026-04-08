@@ -29,9 +29,20 @@ func NewOrchestrator(executor *ACPExecutor) *Orchestrator {
 // SelectAgent decide o perfil do agente baseado no objetivo (Goal).
 func (o *Orchestrator) SelectAgent(goal string) (string, AgentProfile) {
 	g := strings.ToLower(goal)
-	
-	// ⚡ Inteligência de Seleção:
-	// Se falar de código, arquivos ou execução técnica -> Coder (Claude)
+
+	// ⚡ Seleção de Documentação (Doc-Master)
+	// Ativado para explicar código, documentar sistemas ou dúvidas sobre conhecimento.
+	docTerms := []string{
+		"explique", "explicação", "documente", "documentação", "embedding", "vago", "como funciona",
+		"doc", "docs", "documentar", "wiki", "explicar", "tutorial", "obsidian", "canvas", "readme",
+	}
+	for _, term := range docTerms {
+		if strings.Contains(g, term) {
+			return "gemini", ProfileDocMaster
+		}
+	}
+
+	// ⚡ Execução Técnica (Coder - Claude)
 	technicalTerms := []string{"code", "código", "arquivo", "file", "git", "build", "compilar", "erro", "fix"}
 	for _, term := range technicalTerms {
 		if strings.Contains(g, term) {
@@ -44,7 +55,7 @@ func (o *Orchestrator) SelectAgent(goal string) (string, AgentProfile) {
 }
 
 // Execute orquestra o fluxo: Seleção -> Prompt -> Execução -> Cache
-func (o *Orchestrator) Execute(ctx context.Context, sessionID string, goal string, contextData string) (string, string, error) {
+func (o *Orchestrator) Execute(ctx context.Context, sessionID string, goal string, contextData string) (string, string, AgentProfile, error) {
 	// 1. Decidir o Agente
 	agentName, profile := o.SelectAgent(goal)
 	fmt.Printf("[ORCHESTRATOR] Selecionado: %s para a meta: %s\n", profile.Name, goal)
@@ -60,7 +71,7 @@ func (o *Orchestrator) Execute(ctx context.Context, sessionID string, goal strin
 	// 4. Execução via ACP (Modo YOLO incluído no executor)
 	// Como o AskAgent em app.go já gerencia a sessão, injetamos a pergunta.
 	
-	return agentName, finalPrompt, nil 
+	return agentName, finalPrompt, profile, nil 
 }
 
 // AddToHistory adiciona uma mensagem ao cache de memória da sessão.

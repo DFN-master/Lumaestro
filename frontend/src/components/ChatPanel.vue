@@ -85,8 +85,12 @@ const handleSessionEnded = (agent) => {
         <span class="orchestra-icon">🎻</span>
         <div class="header-titles">
           <h2>MAESTRO</h2>
-          <span v-if="activeAgent" class="active-agent-badge" :class="activeAgent">
-            {{ activeAgent.toUpperCase() }} ACTIVE
+          <span 
+            v-if="orchestrator.activeProfile" 
+            class="active-agent-badge" 
+            :class="orchestrator.activeProfile.name.toLowerCase()"
+          >
+            {{ orchestrator.activeProfile.name.toUpperCase() }}
           </span>
           <span v-else class="active-agent-badge standby">STANDBY</span>
         </div>
@@ -138,6 +142,14 @@ const handleSessionEnded = (agent) => {
         </Transition>
 
         <ChatLog :messages="messages" :is-thinking="isThinking" />
+
+        <!-- 📡 Pulso de Atividade: Mostra o que a IA está fazendo AGORA (Anti-Travamento) -->
+        <Transition name="status-fade">
+          <div v-if="orchestrator.currentStatus" class="activity-status-bar glass">
+            <div class="activity-pulse"></div>
+            <span class="activity-text">{{ orchestrator.currentStatus }}</span>
+          </div>
+        </Transition>
 
         <!-- Indicador de Navegação do Grafo (Context Flow) -->
         <Transition name="slide-up">
@@ -368,52 +380,58 @@ const handleSessionEnded = (agent) => {
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
-/* Indicador de Navegação (RAG Flow) */
-.navigation-status {
+/* 📡 Activity Status Bar (Anti-Travamento) */
+.activity-status-bar {
   position: absolute;
-  bottom: 100px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 8px 16px;
-  border-radius: 20px;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(79, 172, 254, 0.3);
+  bottom: 120px;
+  left: 20px;
+  right: 20px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
   align-items: center;
-  gap: 10px;
-  z-index: 100;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(10px);
+  gap: 12px;
+  z-index: 50;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
 }
 
-.nav-pulse {
-  width: 8px;
-  height: 8px;
-  background: #4facfe;
+.activity-pulse {
+  width: 6px;
+  height: 6px;
+  background: #3b82f6;
   border-radius: 50%;
-  box-shadow: 0 0 10px #4facfe;
-  animation: nav-glow 1.5s infinite;
+  animation: activity-glow 1.2s infinite ease-in-out;
+  box-shadow: 0 0 8px #3b82f6;
 }
 
-@keyframes nav-glow {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.5); opacity: 0.5; }
-  100% { transform: scale(1); opacity: 1; }
+@keyframes activity-glow {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.5); opacity: 1; }
 }
 
-.nav-text {
-  font-size: 0.75rem;
+.activity-text {
+  font-size: 11px;
   font-weight: 700;
-  color: #4facfe;
+  color: #94a3b8;
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 
-.slide-up-enter-active, .slide-up-leave-active {
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+/* Perfis de Identidade Visual */
+.active-agent-badge.doc-master { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.2); }
+.active-agent-badge.coder { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); }
+.active-agent-badge.planner { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2); }
+
+.status-fade-enter-active, .status-fade-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.slide-up-enter-from, .slide-up-leave-to {
-  transform: translate(-50%, 20px);
+.status-fade-enter-from, .status-fade-leave-to {
   opacity: 0;
+  transform: translateY(10px);
 }
+
 </style>

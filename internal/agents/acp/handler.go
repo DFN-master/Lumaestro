@@ -13,7 +13,7 @@ import (
 
 // HandleNotification processa notificações assíncronas do processo ACP (streaming, progresso, etc).
 func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage) {
-	fmt.Printf("<< [ACP RECV Notify] %s: %s\n", method, string(params))
+	// fmt.Printf("<< [ACP RECV Notify] %s: %s\n", method, string(params))
 	
 	// 1. Notificações de Progresso
 	if method == "agent/progress" || method == "agentProgress" {
@@ -106,6 +106,15 @@ func (h *ACPRpcHandler) HandleNotification(method string, params json.RawMessage
 					delete(h.Executor.turnChannels, h.Session.ID)
 				}
 				h.Executor.turnMu.Unlock()
+			} else if update.SessionUpdate == "tool_call" {
+				// 📡 TRANSPARÊNCIA: Avisa o Frontend qual ferramenta está sendo preparada
+				// Gemini v0.36 envia tool_call via session/update
+				if !isBg {
+					runtime.EventsEmit(h.Executor.Ctx, "agent:status", map[string]string{
+						"agent":  h.Session.AgentName,
+						"action": "Executando ferramenta de análise...",
+					})
+				}
 			}
 
 			if update.SessionUpdate == "agent_message_chunk" && update.Content.Text != "" {
@@ -244,7 +253,7 @@ func (h *ACPRpcHandler) HandleRequest(id interface{}, method string, params json
 
 // HandleResponse processa as respostas diretas às requisições feitas pelo executor.
 func (h *ACPRpcHandler) HandleResponse(id interface{}, result json.RawMessage, rpcErr *RPCError) {
-	fmt.Printf("<< [ACP RECV Resp] ID %v: %s\n", id, string(result))
+	// fmt.Printf("<< [ACP RECV Resp] ID %v: %s\n", id, string(result))
 	idFloat, ok := id.(float64); if !ok { return }
 	idInt := int(idFloat)
 

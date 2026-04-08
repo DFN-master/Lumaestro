@@ -89,10 +89,16 @@ func (s *ChatService) Ask(ctx context.Context, agent string, sessionID string, q
 
 	// 4. Delegar ao Orquestrador Inteligente
 	// Ele decidirá se usa Coder ou Planner e montará o prompt com histórico
-	selectedAgent, finalPrompt, err := s.Orchestrator.Execute(ctx, sessionID, question, contextData)
+	selectedAgent, finalPrompt, profile, err := s.Orchestrator.Execute(ctx, sessionID, question, contextData)
 	if err != nil {
 		return "", err
 	}
+
+	// 📡 Identidade Visual: Avisa o Frontend qual Perfil assumiu a palavra (Modo Silent RAG)
+	runtime.EventsEmit(s.ctx, "agent:profile", map[string]string{
+		"name":   profile.Name,
+		"engine": selectedAgent,
+	})
 
 	// 5. Execução via CLI (Modo YOLO Automático via ACP)
 	// Como o AskAgent em app.go já gerencia a sessão, retornamos o prompt finalizado.
