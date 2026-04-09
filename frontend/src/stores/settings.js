@@ -39,6 +39,15 @@ export const useSettingsStore = defineStore('settings', () => {
     blend_active_models: true,
     active_model_providers: ['gemini', 'claude', 'lmstudio'],
     primary_provider: 'gemini',
+
+    // Motor de Embeddings (vetores semânticos para Qdrant)
+    embeddings_provider: 'gemini',      // 'gemini' ou 'lmstudio'
+    embeddings_model: '',               // Ex: 'nomic-embed-text', 'text-embedding-nomic-embed-text-v1.5'
+    embedding_dimension: 3072,         // 3072=Gemini, 768=nomic, 1536=text-embedding-ada-002
+
+    // Motor de RAG/Ontologia (geração textual para triplas e chat semântico)
+    rag_provider: 'gemini',            // 'gemini', 'lmstudio' ou 'claude'
+    rag_model: '',                     // Ex: 'google/gemma-4-26b-a4b', 'claude-3-5-sonnet-latest'
   })
 
   // ── Status de Ferramentas ──

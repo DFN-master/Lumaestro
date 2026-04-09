@@ -173,7 +173,11 @@ func (a *App) ResetQdrantDB() string {
 	os.Remove(".lumaestro_topology.json") // Expurga cache visual 3D
 
 	// 3. Recria Infraestrutura do zero
-	fmt.Println("[RESET] 🏗️ Recriando infraestrutura (3072 dim)...")
+	dim := 3072
+	if a.config != nil && a.config.EmbeddingDimension > 0 {
+		dim = a.config.EmbeddingDimension
+	}
+	fmt.Printf("[RESET] 🏗️ Recriando infraestrutura (%d dim)...\n", dim)
 	if a.crawler != nil {
 		a.crawler.EnsureCollections(a.ctx)
 	}

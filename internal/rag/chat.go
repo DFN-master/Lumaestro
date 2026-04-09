@@ -20,7 +20,7 @@ type ChatService struct {
 	Orchestrator *acp.Orchestrator
 	Search       *SearchService
 	Nav          *GraphNavigator
-	Embedder     *provider.EmbeddingService
+	Embedder     provider.Embedder
 	Installer    *tools.Installer
 }
 
@@ -30,7 +30,7 @@ func (s *ChatService) SetContext(ctx context.Context) {
 }
 
 // NewChatService inicializa o orquestrador de chat baseado em CLI.
-func NewChatService(executor *agents.Executor, orchestrator *acp.Orchestrator, search *SearchService, nav *GraphNavigator, embedder *provider.EmbeddingService, installer *tools.Installer) *ChatService {
+func NewChatService(executor *agents.Executor, orchestrator *acp.Orchestrator, search *SearchService, nav *GraphNavigator, embedder provider.Embedder, installer *tools.Installer) *ChatService {
 	return &ChatService{
 		Executor:     executor,
 		Orchestrator: orchestrator,

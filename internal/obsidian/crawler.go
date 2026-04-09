@@ -28,7 +28,7 @@ type IndexCache map[string]string
 type Crawler struct {
 	ctx       context.Context // Contexto persistente do Wails (Lifecycle)
 	VaultPath string
-	Embedder  *provider.EmbeddingService
+	Embedder  provider.Embedder
 	Qdrant    *provider.QdrantClient
 	Ontology  *provider.OntologyService
 	cachePath string
@@ -50,7 +50,7 @@ func (c *Crawler) SetContext(ctx context.Context) {
 }
 
 // NewCrawler inicializa o crawler com suporte a cache de indexação.
-func NewCrawler(vaultPath string, embedder *provider.EmbeddingService, qdrant *provider.QdrantClient, ontology *provider.OntologyService) *Crawler {
+func NewCrawler(vaultPath string, embedder provider.Embedder, qdrant *provider.QdrantClient, ontology *provider.OntologyService) *Crawler {
 	c := &Crawler{
 		VaultPath:   vaultPath,
 		Embedder:    embedder,
@@ -633,7 +633,16 @@ func extractLinks(content string) []string {
 // EnsureCollections verifica e cria as coleções necessárias no Qdrant.
 func (c *Crawler) EnsureCollections(ctx context.Context) error {
 	collections := []string{"obsidian_knowledge", "knowledge_graph"}
-	dimension := 3072 // Gemini Embedding v2 Dimension (768 era v1)
+
+	// Dimensão configurável: lê do config (3072=Gemini, 768=LM Studio nomic, etc.)
+	cfg, _ := config.Load()
+	dimension := 3072
+	if cfg != nil {
+		cfg.NormalizeProviders()
+		if cfg.EmbeddingDimension > 0 {
+			dimension = cfg.EmbeddingDimension
+		}
+	}
 
 	for _, name := range collections {
 		exists, err := c.Qdrant.CheckCollectionExists(name)
@@ -645,7 +654,7 @@ func (c *Crawler) EnsureCollections(ctx context.Context) error {
 			fmt.Printf("[Crawler] 🏗️ Criando coleção inexistente: %s (Dim: %d)\n", name, dimension)
 			runtime.EventsEmit(c.ctx, "agent:log", map[string]string{
 				"source":  "CRAWLER",
-				"content": fmt.Sprintf("🏗️ Preparando infraestrutura: Criando coleção '%s' (3072 dim)...", name),
+				"content": fmt.Sprintf("🏗️ Preparando infraestrutura: Criando coleção '%s' (%d dim)...", name, dimension),
 			})
 			if err := c.Qdrant.CreateCollection(name, dimension); err != nil {
 				return fmt.Errorf("falha ao criar coleção %s: %w", name, err)

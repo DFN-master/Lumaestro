@@ -222,3 +222,41 @@ func (s *EmbeddingService) GenerateContentWithRetry(ctx context.Context, content
 		fmt.Println("⚡ [ResilienceFleet] Acordando. Reiniciando ciclo de cascata...")
 	}
 }
+
+// GenerateText satisfaz a interface ContentGenerator para geração de texto simples.
+func (s *EmbeddingService) GenerateText(ctx context.Context, prompt string) (string, error) {
+	resp, err := s.GenerateContentWithRetry(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", err
+	}
+	if resp == nil {
+		return "", fmt.Errorf("resposta nula do motor generativo")
+	}
+	return resp.Text(), nil
+}
+
+// GenerateMultimodalText satisfaz a interface ContentGenerator para geração com dados binários (imagens, PDFs).
+func (s *EmbeddingService) GenerateMultimodalText(ctx context.Context, prompt string, data []byte, mimeType string) (string, error) {
+	contents := []*genai.Content{
+		{
+			Parts: []*genai.Part{
+				genai.NewPartFromText(prompt),
+				{
+					InlineData: &genai.Blob{
+						MIMEType: mimeType,
+						Data:     data,
+					},
+				},
+			},
+		},
+	}
+
+	resp, err := s.GenerateContentWithRetry(ctx, contents)
+	if err != nil {
+		return "", err
+	}
+	if resp == nil || resp.Text() == "" {
+		return "", fmt.Errorf("resposta vazia no GenerateMultimodalText")
+	}
+	return resp.Text(), nil
+}

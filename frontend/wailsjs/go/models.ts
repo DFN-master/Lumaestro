@@ -114,6 +114,11 @@ export namespace config {
 	    blend_active_models: boolean;
 	    active_model_providers: string[];
 	    primary_provider: string;
+	    embeddings_provider: string;
+	    embeddings_model: string;
+	    embedding_dimension: number;
+	    rag_provider: string;
+	    rag_model: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -147,6 +152,11 @@ export namespace config {
 	        this.blend_active_models = source["blend_active_models"];
 	        this.active_model_providers = source["active_model_providers"];
 	        this.primary_provider = source["primary_provider"];
+	        this.embeddings_provider = source["embeddings_provider"];
+	        this.embeddings_model = source["embeddings_model"];
+	        this.embedding_dimension = source["embedding_dimension"];
+	        this.rag_provider = source["rag_provider"];
+	        this.rag_model = source["rag_model"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

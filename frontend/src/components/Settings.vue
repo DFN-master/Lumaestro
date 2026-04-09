@@ -91,6 +91,16 @@ const setPrimaryProvider = (provider) => {
   }
 }
 
+// Atualiza a dimensão padrão ao trocar o provedor de embeddings
+const onEmbeddingsProviderChange = () => {
+  if (store.config.embeddings_provider === 'gemini') {
+    store.config.embedding_dimension = 3072
+    store.config.embeddings_model = ''
+  } else if (store.config.embeddings_provider === 'lmstudio') {
+    store.config.embedding_dimension = 768
+  }
+}
+
 // ── Lifecycle ──
 onMounted(() => {
   loadConfig()
@@ -403,8 +413,11 @@ onMounted(() => {
       <section v-if="store.activeTab === 'modelos'" class="glass-panel animate-slide-up">
         <h2 class="section-title">Pool Ativo de Modelos</h2>
         <p style="color: var(--p-text-dim); margin-bottom: 2rem; font-size: 0.9rem;">
-          Misture provedores ativos para que o sistema não dependa apenas do Gemini na inicialização.
+          Configure quais provedores e modelos o sistema usa para chat, embeddings e RAG semântico.
         </p>
+
+        <!-- BLEND DE PROVEDORES PARA CHAT -->
+        <h3 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase;">Chat / Orquestrador</h3>
 
         <div class="sec-card" style="margin-bottom: 1.5rem; padding: 1.2rem 1.6rem;">
           <div class="sec-info">
@@ -418,18 +431,18 @@ onMounted(() => {
         </div>
 
         <div class="premium-form-group" style="margin-bottom: 1.5rem;">
-          <label style="margin-bottom: 10px; display: block;">Provedores ativos</label>
+          <label style="margin-bottom: 10px; display: block;">Provedores ativos para chat</label>
           <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
             <button
-              v-for="provider in ['gemini', 'claude', 'lmstudio']"
-              :key="provider"
+              v-for="p in ['gemini', 'claude', 'lmstudio']"
+              :key="p"
               type="button"
-              @click="toggleProvider(provider)"
-              :style="isProviderActive(provider)
+              @click="toggleProvider(p)"
+              :style="isProviderActive(p)
                 ? 'padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(16,185,129,0.4); background: rgba(16,185,129,0.12); color: #d1fae5; cursor: pointer; font-weight: 700;'
                 : 'padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(148,163,184,0.25); background: rgba(15,23,42,0.35); color: #cbd5e1; cursor: pointer; font-weight: 700;'"
             >
-              {{ providerLabel(provider) }} {{ isProviderActive(provider) ? '✓' : '' }}
+              {{ providerLabel(p) }} {{ isProviderActive(p) ? '✓' : '' }}
             </button>
           </div>
           <small style="display: block; margin-top: 0.6rem; color: var(--p-text-dim); font-size: 0.72rem;">
@@ -438,7 +451,7 @@ onMounted(() => {
         </div>
 
         <div class="premium-form-group" style="margin-bottom: 2rem;">
-          <label>Provedor primário</label>
+          <label>Provedor primário (chat padrão)</label>
           <select v-model="store.config.primary_provider" class="maestro-input" @change="setPrimaryProvider(store.config.primary_provider)">
             <option value="gemini">Gemini</option>
             <option value="claude">Claude</option>
@@ -446,7 +459,111 @@ onMounted(() => {
           </select>
         </div>
 
-        <button @click="save" class="btn-glow-blue" style="width: 100%;">SALVAR POOL DE MODELOS</button>
+        <div style="height: 1px; background: rgba(148,163,184,0.12); margin: 2rem 0;"></div>
+
+        <!-- MOTOR DE EMBEDDINGS -->
+        <h3 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase;">🔬 Motor de Embeddings (Qdrant / Sync 3D)</h3>
+        <p style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.82rem; line-height: 1.5;">
+          Define qual motor gera os vetores para busca semântica. Necessário para o Sync Obsidian 3D funcionar.<br/>
+          <strong style="color: #fbbf24;">⚠️ Alterar o provedor muda a dimensão dos vetores — será necessário resetar o banco Qdrant.</strong>
+        </p>
+
+        <div class="premium-form-group" style="margin-bottom: 1.2rem;">
+          <label>Provedor de embeddings</label>
+          <select v-model="store.config.embeddings_provider" class="maestro-input" @change="onEmbeddingsProviderChange">
+            <option value="gemini">Gemini (gemini-embedding-2-preview · 3072 dim)</option>
+            <option value="lmstudio">LM Studio (modelo local)</option>
+          </select>
+        </div>
+
+        <div v-if="store.config.embeddings_provider === 'lmstudio'" class="premium-form-group" style="margin-bottom: 1.2rem;">
+          <label>Modelo de embeddings no LM Studio</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input
+              v-model="store.config.embeddings_model"
+              placeholder="Ex: nomic-embed-text, text-embedding-nomic-embed-text-v1.5"
+              class="maestro-input"
+              style="flex: 1;"
+            />
+            <select v-if="store.lmModels.length > 0" v-model="store.config.embeddings_model" class="maestro-input" style="max-width: 220px;">
+              <option value="">-- selecionar do LM Studio --</option>
+              <option v-for="m in store.lmModels" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </div>
+          <small style="color: var(--p-text-dim); font-size: 0.72rem; display: block; margin-top: 0.4rem;">
+            Carregue um modelo de embeddings no LM Studio (ex: nomic-embed-text). Clique em "🔄 MODELOS" na aba Motores para atualizar a lista.
+          </small>
+        </div>
+
+        <div class="premium-form-group" style="margin-bottom: 2rem;">
+          <label>Dimensão dos vetores</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input
+              v-model.number="store.config.embedding_dimension"
+              type="number"
+              class="maestro-input"
+              style="max-width: 140px;"
+              placeholder="3072"
+            />
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" @click="store.config.embedding_dimension = 3072" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(59,130,246,0.4); background: rgba(59,130,246,0.08); color: #93c5fd; cursor: pointer; font-size: 0.75rem; font-weight: 700;">3072 Gemini</button>
+              <button type="button" @click="store.config.embedding_dimension = 768" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(168,85,247,0.4); background: rgba(168,85,247,0.08); color: #d8b4fe; cursor: pointer; font-size: 0.75rem; font-weight: 700;">768 nomic</button>
+              <button type="button" @click="store.config.embedding_dimension = 1536" style="padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(234,179,8,0.4); background: rgba(234,179,8,0.08); color: #fde68a; cursor: pointer; font-size: 0.75rem; font-weight: 700;">1536 ada-002</button>
+            </div>
+          </div>
+          <small style="color: var(--p-text-dim); font-size: 0.72rem; display: block; margin-top: 0.4rem;">
+            Precisa coincidir exatamente com o modelo escolhido.
+          </small>
+        </div>
+
+        <div style="height: 1px; background: rgba(148,163,184,0.12); margin: 2rem 0;"></div>
+
+        <!-- MOTOR DE RAG / ONTOLOGIA -->
+        <h3 style="font-size: 0.85rem; font-weight: 800; letter-spacing: 1px; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase;">🧠 Motor de RAG / Ontologia (extração de triplas)</h3>
+        <p style="color: var(--p-text-dim); margin-bottom: 1.5rem; font-size: 0.82rem; line-height: 1.5;">
+          Define qual motor processa prompts de análise semântica (extração de fatos, grafo de conhecimento, conflitos).<br/>
+          Pode ser diferente do motor de embeddings.
+        </p>
+
+        <div class="premium-form-group" style="margin-bottom: 1.2rem;">
+          <label>Provedor de RAG/Ontologia</label>
+          <select v-model="store.config.rag_provider" class="maestro-input">
+            <option value="gemini">Gemini (cascata resiliente de modelos)</option>
+            <option value="lmstudio">LM Studio (modelo local)</option>
+            <option value="claude">Claude (melhor para análise de código)</option>
+          </select>
+        </div>
+
+        <div v-if="store.config.rag_provider === 'lmstudio'" class="premium-form-group" style="margin-bottom: 2rem;">
+          <label>Modelo de chat para RAG no LM Studio</label>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input
+              v-model="store.config.rag_model"
+              placeholder="Ex: google/gemma-4-26b-a4b, llama-3.2-3b-instruct"
+              class="maestro-input"
+              style="flex: 1;"
+            />
+            <select v-if="store.lmModels.length > 0" v-model="store.config.rag_model" class="maestro-input" style="max-width: 220px;">
+              <option value="">-- selecionar do LM Studio --</option>
+              <option v-for="m in store.lmModels" :key="m" :value="m">{{ m }}</option>
+            </select>
+          </div>
+          <small style="color: var(--p-text-dim); font-size: 0.72rem; display: block; margin-top: 0.4rem;">
+            Deixe vazio para usar o modelo padrão configurado na aba Motores.
+          </small>
+        </div>
+
+        <div v-if="store.config.rag_provider === 'claude'" class="premium-form-group" style="margin-bottom: 2rem;">
+          <label>Modelo Claude para RAG</label>
+          <select v-model="store.config.rag_model" class="maestro-input">
+            <option value="">claude-3-5-sonnet (padrão)</option>
+            <option value="claude-3-5-sonnet-latest">claude-3-5-sonnet-latest</option>
+            <option value="claude-3-5-haiku-latest">claude-3-5-haiku-latest (mais rápido)</option>
+            <option value="claude-opus-4-5">claude-opus-4-5</option>
+          </select>
+        </div>
+
+        <button @click="save" class="btn-glow-blue" style="width: 100%;">SALVAR CONFIGURAÇÃO DE MODELOS</button>
       </section>
 
       <!-- ABA CONTAS GEMINI (OAUTH) -->

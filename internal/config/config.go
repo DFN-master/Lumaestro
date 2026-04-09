@@ -69,9 +69,18 @@ type Config struct {
 	BlendActiveModels    bool     `json:"blend_active_models"`
 	ActiveModelProviders []string `json:"active_model_providers"`
 	PrimaryProvider      string   `json:"primary_provider"`
+
+	// 🔬 Motor de Embeddings (vetores para busca semântica no Qdrant)
+	EmbeddingsProvider string `json:"embeddings_provider"` // "gemini" ou "lmstudio"
+	EmbeddingsModel    string `json:"embeddings_model"`    // Ex: "nomic-embed-text", "text-embedding-nomic-embed-text-v1.5"
+	EmbeddingDimension int    `json:"embedding_dimension"` // 3072 para Gemini, 768 para nomic, etc.
+
+	// 🧠 Motor de RAG/Ontologia (geração textual para extração de triplas e chat semântico)
+	RAGProvider string `json:"rag_provider"` // "gemini", "lmstudio", ou "claude"
+	RAGModel    string `json:"rag_model"`    // Ex: "google/gemma-4-26b-a4b", "claude-3-5-sonnet-latest"
 }
 
-// NormalizeProviders garante defaults seguros para o pool de provedores.
+// NormalizeProviders garante defaults seguros para o pool de provedores e motores.
 func (c *Config) NormalizeProviders() {
 	if c == nil {
 		return
@@ -83,6 +92,22 @@ func (c *Config) NormalizeProviders() {
 
 	if strings.TrimSpace(c.PrimaryProvider) == "" {
 		c.PrimaryProvider = "gemini"
+	}
+
+	if strings.TrimSpace(c.EmbeddingsProvider) == "" {
+		c.EmbeddingsProvider = "gemini"
+	}
+
+	if c.EmbeddingDimension <= 0 {
+		if c.EmbeddingsProvider == "lmstudio" {
+			c.EmbeddingDimension = 768 // Default para modelos nomic/local
+		} else {
+			c.EmbeddingDimension = 3072 // Gemini embedding v2
+		}
+	}
+
+	if strings.TrimSpace(c.RAGProvider) == "" {
+		c.RAGProvider = "gemini"
 	}
 }
 

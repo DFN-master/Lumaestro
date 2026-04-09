@@ -36,7 +36,7 @@ type App struct {
 	ontology     *provider.OntologyService
 	crawler      *obsidian.Crawler
 	qdrant       *provider.QdrantClient
-	embedder     *provider.EmbeddingService
+	embedder     provider.Embedder
 	chat         *rag.ChatService
 	weaver       *rag.KnowledgeWeaver
 	navigator    *rag.GraphNavigator
@@ -175,15 +175,67 @@ func (a *App) initServices() error {
 	a.emitBoot("qdrant", "📡", "Conectando ao banco vetorial Qdrant...")
 	a.qdrant = provider.NewQdrantClient(cfg.QdrantURL, cfg.QdrantAPIKey)
 
-	a.emitBoot("embeddings", "🧪", "Inicializando motor de Embeddings (Gemini)...")
-	emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
-	if err != nil {
-		a.emitBoot("embeddings", "⚠️", "Embeddings indisponível no momento (modo degradado): "+err.Error())
-		a.embedder = nil
-		a.ontology = nil
+	a.emitBoot("embeddings", "🧪", "Inicializando motor de Embeddings...")
+	a.embedder = nil
+	a.ontology = nil
+
+	embProvider := strings.ToLower(strings.TrimSpace(cfg.EmbeddingsProvider))
+	ragProvider := strings.ToLower(strings.TrimSpace(cfg.RAGProvider))
+	if embProvider == "" {
+		embProvider = "gemini"
+	}
+	if ragProvider == "" {
+		ragProvider = "gemini"
+	}
+
+	// ─── Motor de Embeddings ──────────────────────────────────────────────────
+	if embProvider == "lmstudio" && cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
+		embedModel := cfg.EmbeddingsModel
+		if embedModel == "" {
+			embedModel = cfg.LMStudioModel
+		}
+		lmEmb := provider.NewLMStudioEmbedder(cfg.LMStudioURL, embedModel, cfg.LMStudioModel)
+		a.embedder = lmEmb
+		a.emitBoot("embeddings", "✅", "Motor de Embeddings: LM Studio ("+embedModel+")")
 	} else {
-		a.embedder = emb
-		a.ontology = provider.NewOntologyService(a.ctx, a.embedder)
+		emb, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
+		if err != nil {
+			a.emitBoot("embeddings", "⚠️", "Embeddings Gemini indisponível (modo degradado): "+err.Error())
+		} else {
+			a.embedder = emb
+			a.emitBoot("embeddings", "✅", "Motor de Embeddings: Gemini (gemini-embedding-2-preview)")
+		}
+	}
+
+	// ─── Motor de RAG/Ontologia ───────────────────────────────────────────────
+	if a.embedder != nil {
+		var contentGen provider.ContentGenerator
+		if ragProvider == "lmstudio" && cfg.LMStudioEnabled && cfg.LMStudioURL != "" {
+			ragModel := cfg.RAGModel
+			if ragModel == "" {
+				ragModel = cfg.LMStudioModel
+			}
+			contentGen = provider.NewLMStudioEmbedder(cfg.LMStudioURL, "", ragModel)
+			a.emitBoot("rag", "✅", "Motor RAG/Ontologia: LM Studio ("+ragModel+")")
+		} else if ragProvider == "gemini" || ragProvider == "" {
+			// Reusa o embedder Gemini como ContentGenerator se disponível
+			if gemEmb, ok := a.embedder.(*provider.EmbeddingService); ok {
+				contentGen = gemEmb
+				a.emitBoot("rag", "✅", "Motor RAG/Ontologia: Gemini (cascata)")
+			} else if ragProvider == "gemini" {
+				// embedder não é Gemini mas RAG foi configurado como Gemini — cria serviço separado
+				gemSvc, err := provider.NewEmbeddingService(a.ctx, cfg.GetActiveGeminiKey())
+				if err == nil {
+					contentGen = gemSvc
+					a.emitBoot("rag", "✅", "Motor RAG/Ontologia: Gemini (serviço dedicado)")
+				}
+			}
+		}
+		if contentGen != nil {
+			a.ontology = provider.NewOntologyService(a.ctx, contentGen)
+		} else {
+			a.emitBoot("rag", "⚠️", "Motor RAG/Ontologia indisponível — sem motor generativo configurado")
+		}
 	}
 
 	a.emitBoot("neon", "🧠", "Ativando Córtex Neural — Esquecimento Natural (Decay)...")
@@ -210,7 +262,7 @@ func (a *App) initServices() error {
 		a.crawler = obsidian.NewCrawler(cfg.ObsidianVaultPath, a.embedder, a.qdrant, a.ontology)
 	} else {
 		a.crawler = nil
-		a.emitBoot("crawler", "⚠️", "Crawler pausado: é necessário um provedor de embeddings ativo (atualmente Gemini API).")
+		a.emitBoot("crawler", "⚠️", "Crawler pausado: configure um provedor de embeddings na aba MODELOS (Gemini ou LM Studio com modelo de embeddings).")
 	}
 
 	if a.LStore != nil {
